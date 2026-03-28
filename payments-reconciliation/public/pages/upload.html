@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <title>Upload Center | Payments Reconciliation</title>
+
+  <link rel="stylesheet" href="../css/style.css">
+
+</head>
+
+
+<body>
+
+  <div class="page-container">
+
+    <h1>Upload Center</h1>
+
+    <p class="subtitle">
+      Only Admin & Operations can upload data
+    </p>
+
+
+    <!-- Message Box -->
+    <div
+      id="messageBox"
+      class="message-box"
+    ></div>
+
+
+    <!-- ===============================
+         UPLOAD SECTION
+    ================================= -->
+
+   <div id="uploadSection" class="card">
+
+  <!-- ================= Expected ================= -->
+
+  <section class="upload-group">
+
+    <h3>Expected Payments</h3>
+
+    <div class="upload-row">
+
+      <div class="upload-box">
+
+        <label>CSV File</label>
+
+        <input
+          type="file"
+          id="expectedFile"
+          accept=".csv"
+        >
+
+        <button onclick="uploadExpectedFile()">
+          Upload CSV
+        </button>
+
+      </div>
+
+
+      <div class="upload-box">
+
+        <label>Paste JSON</label>
+
+        <textarea
+          id="expectedData"
+          placeholder='[{"source_ref":"INV-1","customer_id":"C1","amount":1000,"currency":"INR","due_date":"2026-02-01"}]'
+        ></textarea>
+
+        <button onclick="uploadExpectedJSON()">
+          Upload JSON
+        </button>
+
+      </div>
+
+    </div>
+
+  </section>
+
+
+  <hr>
+
+
+  <!-- ================= Transactions ================= -->
+
+  <section class="upload-group">
+
+  <h3>Transactions</h3>
+
+  <div class="upload-row">
+
+    <!-- CSV -->
+    <div class="upload-box">
+
+      <label>CSV File</label>
+
+      <input
+        type="file"
+        id="txnFile"
+        accept=".csv"
+      >
+
+      <button onclick="uploadTransactionFile()">
+        Upload CSV
+      </button>
+
+    </div>
+
+
+    <!-- JSON -->
+    <div class="upload-box">
+
+      <label>Paste JSON</label>
+
+      <textarea
+        id="txnData"
+        placeholder='[{"reference_no":"INV-1","customer_ref":"C1","amount":1000,"currency":"INR","transaction_date":"2026-02-02"}]'
+      ></textarea>
+
+      <button onclick="uploadTransactions()">
+        Upload JSON
+      </button>
+
+    </div>
+
+  </div>
+
+</section>
+
+
+</div>
+
+
+
+    <!-- ===============================
+         UPLOAD HISTORY
+    ================================= -->
+
+    <div class="card">
+
+      <h3>Upload History</h3>
+
+      <table id="historyTable">
+
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Imported</th>
+            <th>Status</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+
+        <tbody></tbody>
+
+      </table>
+
+      <button onclick="loadHistory()">
+        Load More
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <!-- Scripts -->
+  <script src="../js/main.js"></script>
+
+</body>
+</html>

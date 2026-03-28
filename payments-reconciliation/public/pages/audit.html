@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Audit Logs</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<div class="page-container">
+
+  <h1>Audit Logs</h1>
+
+  <div id="messageBox"></div>
+
+  <table id="auditTable">
+    <thead>
+      <tr>
+        <th>User</th>
+        <th>Action</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <button onclick="loadAudit()">
+    Load More
+  </button>
+
+</div>
+
+<script src="../js/main.js"></script>
+<script>
+  requireAuth();
+  loadAudit();
+</script>
+
+</body>
+</html>

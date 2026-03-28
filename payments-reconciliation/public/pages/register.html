@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Register User</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="auth-page">
+
+  <div class="auth-container">
+
+    <h1>Create User</h1>
+
+    <p class="subtitle">
+      Admin Only
+    </p>
+
+    <div
+      id="messageBox"
+      class="message-box"
+    ></div>
+
+    <form id="registerForm">
+
+      <input
+        type="email"
+        id="regEmail"
+        placeholder="Email"
+        required
+      >
+
+      <input
+        type="password"
+        id="regPassword"
+        placeholder="Password"
+        required
+      >
+
+      <select id="regRole">
+
+        <option value="viewer">Viewer</option>
+        <option value="analyst">Analyst</option>
+        <option value="operations">Operations</option>
+
+      </select>
+
+      <button type="submit">
+        Register
+      </button>
+
+    </form>
+
+    <div class="auth-footer">
+      <a href="/pages/dashboard.html"
+         class="auth-link-btn">
+        Back to Dashboard
+      </a>
+    </div>
+
+  </div>
+
+  <script src="../js/main.js"></script>
+
+  <script>
+    // Must be logged in
+    requireAuth();
+
+    // Must be admin
+    if (localStorage.getItem("role") !== "admin") {
+      window.location.href = "/pages/dashboard.html";
+    }
+  </script>
+</div>
+</body>
+</html>

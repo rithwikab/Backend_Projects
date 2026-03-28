@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+
+<body>
+
+<div class="page-container">
+
+  <h1>System Dashboard</h1>
+
+  <div
+    id="messageBox"
+    class="message-box"
+  ></div>
+
+  <div class="card dashboard-card">
+
+    <h3>Reconciliation</h3>
+
+    <button
+  id="runReconBtn"
+  onclick="runReconciliation()"
+>
+  Run Reconciliation
+</button>
+
+
+    <button onclick="loadSummary()">
+      Load Summary
+    </button>
+
+  </div>
+
+  <div
+    id="summaryBox"
+    class="card"
+  ></div>
+  <h3>Expected Payments</h3>
+
+<table class="data-table">
+
+  <thead>
+    <tr>
+      <th>Invoice</th>
+      <th>Customer</th>
+      <th>Amount</th>
+      <th>Currency</th>
+      <th>Status</th>
+      <th>Uploaded</th>
+    </tr>
+  </thead>
+
+  <tbody id="expectedTableBody"></tbody>
+
+</table>
+
+<button
+  id="loadMoreBtn"
+  onclick="loadExpectedPayments()"
+>
+  Load More
+</button>
+
+
+</div>
+
+<script src="../js/main.js"></script>
+
+<script>
+  requireAuth();
+  //loadNavbar();
+</script>
+
+</body>
+</html>
