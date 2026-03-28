@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dashboard</title>
+
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+<!-- Auth -->
+<script src="middleware/auth.js"></script>
+
+
+<!-- Navbar -->
+<div id="navbar"></div>
+<script src="js/navbar.js"></script>
+
+
+<!-- Main -->
+<div class="container">
+
+  <h1>Dashboard</h1>
+
+  <div class="dashboard">
+
+    <div class="card">
+      <h2 id="pending">0</h2>
+      <p>Pending Tasks</p>
+    </div>
+
+    <div class="card">
+      <h2 id="progress">0</h2>
+      <p>In Progress</p>
+    </div>
+
+    <div class="card">
+      <h2 id="done">0</h2>
+      <p>Completed</p>
+    </div>
+
+  </div>
+
+</div>
+
+
+<script>
+
+// Load Dashboard Stats
+async function loadDashboard() {
+
+  const res = await fetch('/tasks/my', {
+    headers: {
+      Authorization: localStorage.getItem('token')
+    }
+  })
+
+  const tasks = await res.json()
+
+
+  let pending = 0
+  let progress = 0
+  let done = 0
+
+
+  tasks.forEach(t => {
+
+    if (t.status === 'pending') pending++
+    if (t.status === 'in_progress') progress++
+    if (t.status === 'done') done++
+
+  })
+
+
+  document.getElementById('pending').textContent = pending
+  document.getElementById('progress').textContent = progress
+  document.getElementById('done').textContent = done
+}
+
+
+// Init
+loadDashboard()
+
+</script>
+
+</body>
+</html>

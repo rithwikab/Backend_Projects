@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Create User</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+<!-- Frontend Auth Guard -->
+<script src="js/auth.js"></script>
+
+
+<!-- Navbar -->
+<div id="navbar"></div>
+<script src="js/navbar.js"></script>
+
+
+<!-- Main -->
+<div class="container">
+
+  <h2>Register User (HR Only)</h2>
+
+  <form id="userForm">
+
+    <label>Name</label>
+    <input type="text" id="name" required>
+
+    <label>Email</label>
+    <input type="email" id="email" required>
+
+    <label>Password</label>
+    <input type="password" id="password" required>
+
+    <label>Role</label>
+    <select id="role" required>
+      <option value="">Select Role</option>
+      <option value="employee">Employee</option>
+      <option value="manager">Manager</option>
+      <option value="hr">HR</option>
+    </select>
+
+    <button class="btn" type="submit">Create User</button>
+
+  </form>
+
+</div>
+
+
+<script>
+
+// Only HR allowed
+if (localStorage.getItem('role') !== 'hr') {
+  alert('Access Denied')
+  location.href = 'index.html'
+}
+
+
+// Handle Submit
+document.getElementById('userForm').addEventListener('submit', async function (e) {
+
+  e.preventDefault()   // IMPORTANT
+
+
+  // Read values properly
+  const name = document.getElementById('name').value.trim()
+  const email = document.getElementById('email').value.trim()
+  const password = document.getElementById('password').value
+  const role = document.getElementById('role').value
+
+
+  // Frontend validation
+  if (!name || !email || !password || !role) {
+    alert('Please fill all fields')
+    return
+  }
+
+
+  const res = await fetch('/users/register', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: localStorage.getItem('token')
+    },
+    body: JSON.stringify({
+      name,
+      email,
+      password,
+      role
+    })
+  })
+
+
+  const data = await res.json()
+
+
+  if (!res.ok) {
+    alert(data.msg || 'Error creating user')
+    return
+  }
+
+
+  alert('User created successfully')
+
+
+  // Reset form
+  document.getElementById('userForm').reset()
+
+})
+
+</script>
+
+</body>
+</html>

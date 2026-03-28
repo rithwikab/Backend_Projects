@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Notifications</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+<!-- Auth -->
+<script src="js/auth.js"></script>
+
+<!-- Navbar -->
+<div id="navbar"></div>
+<script src="js/navbar.js"></script>
+
+
+<!-- Main -->
+<div class="container">
+
+  <h2>Notifications</h2>
+
+  <ul id="list"></ul>
+
+</div>
+
+
+<script>
+
+// Load Notifications
+async function loadNotifications() {
+
+  try {
+
+    const res = await fetch('/notifications/my', {
+      headers: {
+        Authorization: localStorage.getItem('token')
+      }
+    })
+
+    if (!res.ok) {
+      throw new Error('Failed to load notifications')
+    }
+
+    const notes = await res.json()
+
+    const list = document.getElementById('list')
+
+    list.innerHTML = ''
+
+
+    if (!notes.length) {
+      list.innerHTML = '<p>No notifications</p>'
+      return
+    }
+
+
+    notes.forEach(n => {
+
+      const li = document.createElement('li')
+
+      li.className = 'task'
+
+      li.style.background = n.isRead ? '#fff' : '#eef2ff'
+
+
+      li.innerHTML = `
+        <div>
+          <p><b>${n.message}</b></p>
+          <small>${new Date(n.createdAt).toLocaleString()}</small>
+        </div>
+
+        ${
+          n.isRead
+            ? '<span style="color:green;">Read</span>'
+            : `<button class="btn" onclick="markRead('${n._id}')">Mark Read</button>`
+        }
+      `
+
+      list.appendChild(li)
+    })
+
+  } catch (err) {
+
+    console.error('NOTIFICATION ERROR:', err)
+
+    document.getElementById('list').innerHTML =
+      '<p style="color:red;">Failed to load notifications</p>'
+  }
+}
+
+
+// Mark Read
+async function markRead(id) {
+
+  await fetch('/notifications/' + id + '/read', {
+    method: 'PATCH',
+    headers: {
+      Authorization: localStorage.getItem('token')
+    }
+  })
+
+  loadNotifications()
+}
+
+
+// Init
+loadNotifications()
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Create Task</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+<!-- Auth Guard -->
+<script src="js/auth.js"></script>
+
+
+<!-- Navbar -->
+<div id="navbar"></div>
+<script src="js/navbar.js"></script>
+
+<!-- Main -->
+<div class="container">
+
+  <h2>Create Task</h2>
+
+  <form id="taskForm">
+
+    <label>Title</label>
+    <input id="title" required>
+
+    <label>Description</label>
+    <textarea id="desc" required></textarea>
+
+    <label>Assign To (Employee)</label>
+    <select id="assignedTo" required></select>
+
+    <button class="btn" type="submit">Create Task</button>
+
+  </form>
+
+</div>
+
+<script>
+
+async function loadEmployees() {
+
+  const res = await fetch('/users/employees', {
+    headers: {
+      Authorization: localStorage.getItem('token')
+    }
+  })
+
+  const users = await res.json()
+
+  const select = document.getElementById('assignedTo')
+
+  select.innerHTML = '<option value="">Select Employee</option>'
+
+  users.forEach(u => {
+    const opt = document.createElement('option')
+    opt.value = u._id
+    opt.textContent = u.name
+    select.appendChild(opt)
+  })
+}
+
+loadEmployees()
+
+
+// Create Task
+document.getElementById('taskForm').addEventListener('submit', async e => {
+
+  e.preventDefault()
+
+  await fetch('/tasks', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: localStorage.getItem('token')
+    },
+    body: JSON.stringify({
+      title: title.value,
+      description: desc.value,
+      assignedTo: assignedTo.value
+    })
+  })
+
+  alert('Task Created Successfully')
+
+  location.href = '/tasks.html'
+})
+
+</script>
+
+</body>
+</html>

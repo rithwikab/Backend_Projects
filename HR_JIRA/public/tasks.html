@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>My Tasks</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+<!-- Auth Guard -->
+<script src="js/auth.js"></script>
+
+
+<!-- Navbar -->
+<div id="navbar"></div>
+<script src="js/navbar.js"></script>
+
+<!-- Main -->
+<div class="container">
+
+  <h2>My Tasks</h2>
+
+  <div id="taskList"></div>
+
+</div>
+
+
+<script>
+
+// Load Tasks
+async function loadTasks() {
+
+  const res = await fetch('/tasks/my', {
+    headers: {
+      Authorization: localStorage.getItem('token')
+    }
+  })
+
+  const tasks = await res.json()
+
+  const list = document.getElementById('taskList')
+
+  list.innerHTML = ''
+
+
+  if (!tasks.length) {
+    list.innerHTML = '<p>No tasks assigned</p>'
+    return
+  }
+
+
+  tasks.forEach(t => {
+
+    const div = document.createElement('div')
+
+    div.className = 'task'
+
+    div.innerHTML = `
+      <div>
+        <h3>${t.title}</h3>
+        <p>${t.description || ''}</p>
+
+        <small>
+          Assigned by: ${t.createdBy?.name || 'N/A'}
+        </small>
+      </div>
+
+      <div>
+
+        <span class="status ${t.status}">
+          ${t.status.replace('_',' ')}
+        </span>
+
+        <br><br>
+
+        <button class="btn"
+          onclick="updateStatus('${t._id}','${t.status}')">
+          Update
+        </button>
+
+      </div>
+    `
+
+    list.appendChild(div)
+  })
+}
+
+
+// Update Status
+async function updateStatus(id, current) {
+
+  const flow = ['pending', 'in_progress', 'done']
+
+  const next =
+    flow[(flow.indexOf(current) + 1) % flow.length]
+
+
+  await fetch('/tasks/' + id + '/status', {
+
+    method: 'PATCH',
+
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: localStorage.getItem('token')
+    },
+
+    body: JSON.stringify({ status: next })
+  })
+
+
+  loadTasks()
+}
+
+
+// Init
+loadTasks()
+
+</script>
+
+</body>
+</html>
