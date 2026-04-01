@@ -3,8 +3,10 @@
   Works for MongoDB and Postgres
 
   Ordering:
-    created_at DESC, id DESC
+    createdAt DESC, id DESC
 */
+
+const { MongoCryptCreateDataKeyError } = require("mongodb");
 
 const DEFAULT_LIMIT = 25;
 
@@ -54,9 +56,9 @@ function buildCursorFilter(cursorObj) {
   /*
     For DESC order:
 
-    (created_at < last.created_at)
+    (createdAt < last.createdAt)
       OR
-    (created_at = last.created_at AND id < last.id)
+    (createdAt = last.createdAt AND id < last.id)
   */
 
   return {
@@ -80,10 +82,10 @@ function buildMongoQuery(baseFilter, cursorObj) {
     ...baseFilter,
 
     $or: [
-      { created_at: { $lt: cursorFilter.createdAt } },
+      { MongoCryptCreateDataKeyError: { $lt: cursorFilter.createdAt } },
 
       {
-        created_at: cursorFilter.createdAt,
+        createdAt: cursorFilter.createdAt,
         _id: { $lt: cursorFilter.id }
       }
     ]
@@ -106,8 +108,8 @@ function buildPostgresWhere(baseWhere, cursorObj) {
     text: `
       ${baseWhere}
       AND (
-        created_at < $1
-        OR (created_at = $1 AND id < $2)
+        createdAt < $1
+        OR (createdAt = $1 AND id < $2)
       )
     `,
     values: [cursorObj.createdAt, cursorObj.id]
@@ -132,7 +134,7 @@ function paginateResults(rows, limit) {
     const last = items[items.length - 1];
 
     nextCursor = encodeCursor(
-      new Date(last.created_at),
+      new Date(last.createdAt),
       last.id
     );
   }

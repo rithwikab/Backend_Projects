@@ -53,6 +53,14 @@ router.get(
   auth,
   listExpectedPayments
 );
+const {
+  getTransactions
+} = require("../modules/transactions/transaction.controller");
 
+router.get(
+  "/transactions",
+  auth,
+  getTransactions
+);
 
 module.exports = router;

@@ -39,3 +39,45 @@ exports.bulkInsert = async (
     { ordered: false }
   );
 };
+const {
+  decodeCursor,
+  buildMongoQuery,
+  paginateResults,
+  DEFAULT_LIMIT
+} = require("../utils/pagination");
+
+/* ===============================
+   Get Paginated Transactions
+================================ */
+
+exports.getPaginatedTransactions = async ({
+  cursor,
+  limit,
+  status
+}) => {
+
+  const parsedCursor = decodeCursor(cursor);
+
+  const baseFilter = {};
+
+  if (status) {
+    baseFilter.status = status;
+  }
+
+  const query = buildMongoQuery(
+    baseFilter,
+    parsedCursor
+  );
+
+  const finalLimit = Math.min(
+    parseInt(limit) || DEFAULT_LIMIT,
+    100
+  );
+
+  const rows = await Transaction
+    .find(query)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(finalLimit + 1); // +1 for hasMore
+
+  return paginateResults(rows, finalLimit);
+};

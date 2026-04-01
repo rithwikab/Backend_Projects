@@ -17,7 +17,7 @@ exports.listReconciliations = async (
 
   const rows = await Reconciliation
     .find(query)
-    .sort({ created_at: -1, _id: -1 })
+    .sort({ createdAt: -1, _id: -1 })
     .limit(limit + 1);
 
   return paginateResults(rows, limit);
