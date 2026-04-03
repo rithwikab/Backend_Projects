@@ -1,101 +1,97 @@
 const Expected = require("../models/ExpectedPayment");
 const Transaction = require("../models/Transaction");
 const Reconciliation = require("../models/Reconciliation");
-const UploadBatch =
-  require("../models/UploadBatch");
+const UploadBatch = require("../models/UploadBatch");
+
 const {
   reconcilePayments
 } = require("./reconciliation.logic");
 
 const cache =
   require("./reconciliationSummary.cache");
-const AuditLog =
-  require("../models/AuditLog");
 
 /*
-  Run reconciliation and persist results
+  Run reconciliation
 */
 exports.runReconciliation = async () => {
 
-  /* ---------------- Fetch Data ---------------- */
-
+  /* Fetch only required data */
   const expected = await Expected.find({
     status: { $in: ["PENDING", "PARTIAL"] }
   });
 
   const transactions = await Transaction.find({
-    status: "UNMATCHED"
+     status: { $in: ["UNMATCHED", "PARTIAL"] }
   });
 
   if (!expected.length || !transactions.length) {
-
-    return {
-      message: "Nothing to reconcile"
-    };
+    return { message: "Nothing to reconcile" };
   }
 
-  /* ---------------- Run Logic ---------------- */
-
+  /* Run matching logic */
   const results =
     reconcilePayments(expected, transactions);
 
-  /* ---------------- Persist ---------------- */
-
   const reconDocs = [];
+
+  const expectedUpdates = [];
+  const transactionIdsToUpdate = [];
 
   for (const r of results) {
 
     reconDocs.push({
-  expected_payment_id: r.expectedId,
-  actual_transaction_ids: r.transactionIds || [],
-  status: r.status,
-  variance_amount: r.variance,
-  method: "AUTO"
-});
+      expected_payment_id: r.expectedId,
+      actual_transaction_ids: r.transactionIds || [],
+      status: r.status,
+      variance_amount: r.variance,
+      method: "AUTO"
+    });
 
-
-    /* Update Expected */
-
-    await Expected.updateOne(
-      { _id: r.expectedId },
-      {
-        status: mapExpectedStatus(r.status)
+    expectedUpdates.push({
+      updateOne: {
+        filter: { _id: r.expectedId },
+        update: {
+          status: mapExpectedStatus(r.status)
+        }
       }
+    });
+
+    if (r.transactionIds?.length) {
+
+  if (r.status === "PARTIAL_MATCH") {
+    // keep transactions reusable
+    await Transaction.updateMany(
+      { _id: { $in: r.transactionIds } },
+      { status: "PARTIAL" }
     );
+  } else {
+    transactionIdsToUpdate.push(...r.transactionIds);
+  }
+}
+  }
 
-    /* Update Transactions */
+  /* Bulk DB operations (VERY IMPORTANT IMPROVEMENT) */
 
-    if (
-      Array.isArray(r.transactionIds) &&
-      r.transactionIds.length > 0
-    ) {
+  if (reconDocs.length) {
 
+    await Reconciliation.insertMany(reconDocs);
+
+    await Expected.bulkWrite(expectedUpdates);
+
+    if (transactionIdsToUpdate.length) {
       await Transaction.updateMany(
-        { _id: { $in: r.transactionIds } },
+        { _id: { $in: transactionIdsToUpdate } },
         { status: "MATCHED" }
       );
     }
-  }
 
-  /* ---------------- Save Recon ---------------- */
-
-  if (reconDocs.length > 0) {
-
-    await Reconciliation.insertMany(reconDocs);
-        // Mark all pending batches as processed
     await UploadBatch.updateMany(
       { status: "PENDING" },
       { status: "PROCESSED" }
-    );  
+    );
   }
-//   await AuditLog.create({
-//   user_id: null, // optional if not passing req
-//   action: "RUN_RECONCILIATION",
-//   meta: { reconciled: reconDocs.length }
-// });
 
-  /* ---------------- Clear Cache ---------------- */
-
+  /* Clear cache */
   cache.clear("recon-summary");
 
   return {
@@ -104,14 +100,10 @@ exports.runReconciliation = async () => {
 };
 
 
-/* =================================================
-   STATUS MAPPER
-================================================= */
+/* STATUS MAPPING */
 
 function mapExpectedStatus(status) {
-
   switch (status) {
-
     case "PERFECT_MATCH":
     case "AGGREGATED_MATCH":
       return "PAID";
@@ -119,25 +111,19 @@ function mapExpectedStatus(status) {
     case "PARTIAL_MATCH":
       return "PARTIAL";
 
-    case "MISSING":
-      return "PENDING";
-
     default:
       return "PENDING";
   }
 }
 
 
-/* =================================================
-   DASHBOARD SUMMARY
-================================================= */
+/* DASHBOARD SUMMARY */
 
 exports.getReconciliationSummary = async () => {
 
   const key = "recon-summary";
 
   const cached = cache.get(key);
-
   if (cached) return cached;
 
   const matched =

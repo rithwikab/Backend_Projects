@@ -30,10 +30,16 @@ const uploadBatchSchema = new mongoose.Schema({
   },
 
   status: {
-    type: String,
-    enum: ["PENDING", "RECONCILED", "PARTIAL"],
-    default: "PENDING"
-  },
+  type: String,
+  enum: [
+    "PENDING",
+    "PROCESSED",   // ✅ ADD
+    "FAILED",      // ✅ ADD
+    "RECONCILED",
+    "PARTIAL"
+  ],
+  default: "PENDING"
+},
 
   reconciliation_id: {
     type: mongoose.Schema.Types.ObjectId,

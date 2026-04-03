@@ -19,12 +19,17 @@ const transactionSchema = new mongoose.Schema({
 
   status: {
     type: String,
+    enum: ["UNMATCHED", "MATCHED"],
     default: "UNMATCHED"
   },
 
   raw_payload: Object,
 
- payload_hash: String,
+ payload_hash: {
+  type: String,
+  index: true,
+  unique: true
+}
 
 }, { timestamps: true });
 

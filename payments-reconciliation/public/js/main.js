@@ -581,20 +581,25 @@ function initDashboard() {
 
 function showMessageFromAPI(data) {
 
-  if (data.success) {
+  if (!data.success) {
+    showMessage(data.error || "Failed", "error");
+    return;
+  }
 
+  const { imported = 0, rejected = 0 } = data.data || {};
+
+  if (imported === 0 && rejected > 0) {
     showMessage(
-      `Success: ${data.data.imported} imported`,
-      "success"
-    );
-
-  } else {
-
-    showMessage(
-      data.error || "Failed",
+      `All records rejected (${rejected})`,
       "error"
     );
+    return;
   }
+
+  showMessage(
+    `Imported: ${imported}, Rejected: ${rejected}`,
+    "success"
+  );
 }
 /* ===============================
    FILE UPLOAD (CSV)
