@@ -88,11 +88,11 @@ exports.runReconciliation = async () => {
       { status: "PROCESSED" }
     );  
   }
-  await AuditLog.create({
-  user_id: null, // optional if not passing req
-  action: "RUN_RECONCILIATION",
-  meta: { reconciled: reconDocs.length }
-});
+//   await AuditLog.create({
+//   user_id: null, // optional if not passing req
+//   action: "RUN_RECONCILIATION",
+//   meta: { reconciled: reconDocs.length }
+// });
 
   /* ---------------- Clear Cache ---------------- */
 

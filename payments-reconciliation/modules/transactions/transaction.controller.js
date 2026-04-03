@@ -5,7 +5,9 @@ const crypto = require("crypto");
 const UploadBatch = require("../../models/UploadBatch");
 const TransactionRepo = require("../../repositories/transaction.repo");
 const AuditLog = require("../../models/AuditLog");
-
+const {
+  processTransactionUpload
+} = require("../../jobs/transaction.job");
 /*
   Upload Transactions
   Supports: JSON, CSV
@@ -101,45 +103,51 @@ exports.uploadTransactions = async (req, res, next) => {
        STEP 5: INSERT
     ================================ */
 
-    const inserted = await TransactionRepo.bulkInsert(
+    /*const inserted = await TransactionRepo.bulkInsert(
       normalized,
       hash
     );
 
-
+    */
     /* ===============================
        STEP 6: CREATE BATCH
     ================================ */
 
-    const batch = await UploadBatch.create({
+    /*const batch = await UploadBatch.create({
       user_id: req.user.id,
       type: "transaction",
       total_records: records.length,
       imported: inserted.length,
       rejected: invalid.length,
       status: "PENDING"
-    });
+    });*/
+   processTransactionUpload({
+  records: valid,
+  user_id: req.user.id,
+  hash,
+  invalidCount: invalid.length,
+  totalRecords: records.length
+});
 
-    await AuditLog.create({
-      user_id: req.user.id,
-      action: "UPLOAD_TRANSACTION",
-      meta: { batch_id: batch._id }
-    });
+    // await AuditLog.create({
+    //   user_id: req.user.id,
+    //   action: "UPLOAD_TRANSACTION",
+    //   meta: { batch_id: batch._id }
+    // });
 
 
     /* ===============================
        RESPONSE
     ================================ */
 
-    return res.status(201).json({
-      success: true,
-      data: {
-        batch_id: batch._id,
-        imported: inserted.length,
-        rejected: invalid.length
-      }
-    });
-
+    return res.status(202).json({
+    success: true,
+    message: "Upload accepted, processing in background",
+    data: {
+      imported: valid.length,
+      rejected: invalid.length
+    }
+  });
   } catch (err) {
     console.error("Txn Upload:", err);
     next(err);
