@@ -15,38 +15,66 @@ exports.processTransactionUpload = async ({
   totalRecords
 }) => {
 
-  // Normalize
-  const normalized = records.map(r => ({
-    ...r,
-    amount: Number(r.amount),
-    transaction_date: new Date(r.transaction_date),
-    status: "UNMATCHED"
-  }));
+  console.log("Processing records:", records.length);
 
-  // Insert
-  const inserted = await TransactionRepo.bulkInsert(
-    normalized,
-    hash
-  );
+  try {
+    
+    /* Normalize */
+    const normalized = records.map(r => ({
+      ...r,
+      amount: Number(r.amount),
+      transaction_date: new Date(r.transaction_date),
+      status: "UNMATCHED"
+    }));
 
-  // Batch
-  const batch = await UploadBatch.create({
-    user_id,
+    /* Insert */
+    const inserted = await TransactionRepo.bulkInsert(
+      normalized,
+      hash
+    );
+
+    /* Batch */
+    const batch = await UploadBatch.create({
+      user_id,
+      type: "transaction",
+      total_records: totalRecords,
+      imported: inserted.length,
+      rejected: invalidCount,
+      status: "PROCESSED"
+    });
+
+    /* Audit */
+    await AuditLog.create({
+      user_id: user_id || null,
+      action: "UPLOAD_TRANSACTION",
+      meta: { batch_id: batch._id }
+    });
+
+    console.log("Job completed");
+
+    return { inserted, batch };
+    
+  } catch (err) {
+
+  console.error("Job failed:", err.message);
+
+  console.log("Retry recommended for batch"); // ✅ ADD HERE
+
+  await UploadBatch.create({
+    user_id: user_id || null,
     type: "transaction",
     total_records: totalRecords,
-    imported: inserted.length,
-    rejected: invalidCount,
-    status: "PENDING"
+    imported: 0,
+    rejected: totalRecords,
+    status: "FAILED"
   });
 
- await AuditLog.create({
-  user_id: user_id || null,
-  action: "UPLOAD_TRANSACTION",
-  meta: { batch_id: batch._id }
-});
+  await AuditLog.create({
+    user_id: user_id || null,
+    action: "UPLOAD_FAILED",
+    meta: { error: err.message }
+  });
 
-  return {
-    inserted,
-    batch
-  };
+  return null;
+}
 };

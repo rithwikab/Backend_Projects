@@ -2,15 +2,14 @@ const csv = require("csv-parser");
 const fs = require("fs");
 const crypto = require("crypto");
 
-const UploadBatch = require("../../models/UploadBatch");
 const TransactionRepo = require("../../repositories/transaction.repo");
-const AuditLog = require("../../models/AuditLog");
+
 const {
   processTransactionUpload
 } = require("../../jobs/transaction.job");
+
 /*
   Upload Transactions
-  Supports: JSON, CSV
 */
 exports.uploadTransactions = async (req, res, next) => {
   try {
@@ -22,7 +21,10 @@ exports.uploadTransactions = async (req, res, next) => {
     let records = [];
 
     if (req.is("application/json")) {
-      records = req.body.records;
+
+      records = Array.isArray(req.body)
+        ? req.body
+        : req.body.records;
 
       if (!Array.isArray(records)) {
         return res.status(400).json({
@@ -32,6 +34,7 @@ exports.uploadTransactions = async (req, res, next) => {
       }
 
     } else if (req.file) {
+
       const { path: filePath, originalname } = req.file;
 
       if (!originalname.endsWith(".csv")) {
@@ -51,6 +54,8 @@ exports.uploadTransactions = async (req, res, next) => {
       });
     }
 
+    console.log("RAW BODY:", req.body);
+    console.log("RECORDS:", records);
 
     /* ===============================
        STEP 2: VALIDATION
@@ -70,9 +75,21 @@ exports.uploadTransactions = async (req, res, next) => {
       valid.push(r);
     }
 
+    console.log("VALID:", valid.length);
+    console.log("INVALID:", invalid.length);
+
+    /* 🚨 CRITICAL FIX — EARLY RETURN */
+
+    if (valid.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "All records invalid",
+        rejected: invalid.length
+      });
+    }
 
     /* ===============================
-       STEP 3: IDEMPOTENCY CHECK (HASH)
+       STEP 3: IDEMPOTENCY CHECK
     ================================ */
 
     const hash = hashBatch(valid);
@@ -86,68 +103,32 @@ exports.uploadTransactions = async (req, res, next) => {
       });
     }
 
-
     /* ===============================
-       STEP 4: NORMALIZE DATA
+       STEP 4: ASYNC PROCESSING
     ================================ */
 
-    const normalized = valid.map(r => ({
-      ...r,
-      amount: Number(r.amount),
-      transaction_date: new Date(r.transaction_date),
-      status: "UNMATCHED"
-    }));
-
-
-    /* ===============================
-       STEP 5: INSERT
-    ================================ */
-
-    /*const inserted = await TransactionRepo.bulkInsert(
-      normalized,
-      hash
-    );
-
-    */
-    /* ===============================
-       STEP 6: CREATE BATCH
-    ================================ */
-
-    /*const batch = await UploadBatch.create({
+    processTransactionUpload({
+      records: valid,
       user_id: req.user.id,
-      type: "transaction",
-      total_records: records.length,
-      imported: inserted.length,
-      rejected: invalid.length,
-      status: "PENDING"
-    });*/
-   processTransactionUpload({
-  records: valid,
-  user_id: req.user.id,
-  hash,
-  invalidCount: invalid.length,
-  totalRecords: records.length
-});
-
-    // await AuditLog.create({
-    //   user_id: req.user.id,
-    //   action: "UPLOAD_TRANSACTION",
-    //   meta: { batch_id: batch._id }
-    // });
-
+      hash,
+      invalidCount: invalid.length,
+      totalRecords: records.length
+    });
 
     /* ===============================
        RESPONSE
     ================================ */
 
     return res.status(202).json({
-    success: true,
-    message: "Upload accepted, processing in background",
-    data: {
-      imported: valid.length,
-      rejected: invalid.length
-    }
-  });
+      success: true,
+      message: "Upload accepted, processing in background",
+      data: {
+        total: records.length,
+        imported: valid.length,
+        rejected: invalid.length
+      }
+    });
+
   } catch (err) {
     console.error("Txn Upload:", err);
     next(err);
@@ -181,29 +162,23 @@ function parseCSV(filePath) {
 
 function validate(r) {
 
-  const requiredFields = [
-    "reference_no",
-    "customer_ref",
-    "amount",
-    "currency",
-    "transaction_date"
-  ];
-
-  for (const field of requiredFields) {
-    if (!r[field]) {
-      return { valid: false, error: `${field} required` };
-    }
+  if (!r.reference_no) {
+    return { valid: false, error: "reference_no required" };
   }
 
-  if (isNaN(r.amount) || r.amount <= 0) {
+  if (!r.customer_ref) {
+    return { valid: false, error: "customer_ref required" };
+  }
+
+  if (r.amount === undefined || isNaN(r.amount) || Number(r.amount) <= 0) {
     return { valid: false, error: "Invalid amount" };
   }
 
-  if (String(r.currency).length !== 3) {
+  if (!r.currency || String(r.currency).length !== 3) {
     return { valid: false, error: "Invalid currency" };
   }
 
-  if (isNaN(Date.parse(r.transaction_date))) {
+  if (!r.transaction_date || isNaN(Date.parse(r.transaction_date))) {
     return { valid: false, error: "Invalid date" };
   }
 
@@ -226,20 +201,13 @@ function hashBatch(records) {
     .update(JSON.stringify(sorted))
     .digest("hex");
 }
-const transactionRepo =
-  require("../../repositories/transaction.repo");
-
-/*
-  Get Transactions (Pagination + Filtering)
-*/
 exports.getTransactions = async (req, res) => {
-
   try {
 
     const { cursor, limit, status } = req.query;
 
     const result =
-      await transactionRepo.getPaginatedTransactions({
+      await TransactionRepo.getPaginatedTransactions({
         cursor,
         limit,
         status
