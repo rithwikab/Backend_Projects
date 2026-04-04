@@ -157,6 +157,32 @@ JWT_EXPIRES_IN=1h
 ```
 
 ---
+## 🔑 Default Admin Access
+
+To access the application after starting Docker, use the following credentials:
+
+```text
+Email: admin@test.com
+Password: 123456
+```
+
+> Note: Ensure this user exists in the database. If not, you can manually insert it using MongoDB:
+
+```bash
+docker exec -it <mongo-container-name> mongosh
+```
+
+```js
+use reconciliation_db
+
+db.users.insertOne({
+  email: "admin@test.com",
+  password: "<bcrypt-hash-of-123456>",
+  roles: ["admin"],
+  createdAt: new Date(),
+  updatedAt: new Date()
+})
+```
 
 # Sample Test Flow
 
