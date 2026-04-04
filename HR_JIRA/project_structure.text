@@ -1,0 +1,30 @@
+- .env
+- .gitignore
+- app.js
+- middleware
+  - auth.js
+  - role.js
+- models
+  - notification.js
+  - task.js
+  - user.js
+- package-lock.json
+- package.json
+- public
+  - assigned-tasks.html
+  - create-task.html
+  - create-user.html
+  - css
+    - style.css
+  - index.html
+  - js
+    - auth.js
+    - navbar.js
+  - login.html
+  - notifications.html
+  - tasks.html
+- README.md
+- routes
+  - notifications.js
+  - tasks.js
+  - users.js
