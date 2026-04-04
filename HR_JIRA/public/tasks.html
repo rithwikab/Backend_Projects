@@ -24,9 +24,15 @@
 
 </div>
 
-
+<div id="aiModal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <h3>AI Analysis</h3>
+    <div id="aiResult"></div>
+  </div>
+</div>
 <script>
-
+const aiCache = {};
 // Load Tasks
 async function loadTasks() {
 
@@ -56,30 +62,41 @@ async function loadTasks() {
     div.className = 'task'
 
     div.innerHTML = `
-      <div>
-        <h3>${t.title}</h3>
-        <p>${t.description || ''}</p>
+  <div>
+    <h3>${t.title}</h3>
+    <p>${t.description || ''}</p>
 
-        <small>
-          Assigned by: ${t.createdBy?.name || 'N/A'}
-        </small>
-      </div>
+    <small>
+      Assigned by: ${t.createdBy?.name || 'N/A'}
+    </small>
+  </div>
 
-      <div>
+  <div>
 
-        <span class="status ${t.status}">
-          ${t.status.replace('_',' ')}
-        </span>
+    <span class="status ${t.status}">
+      ${t.status.replace('_',' ')}
+    </span>
 
-        <br><br>
+    <br><br>
 
-        <button class="btn"
-          onclick="updateStatus('${t._id}','${t.status}')">
-          Update
-        </button>
+    <button class="btn"
+      onclick="updateStatus('${t._id}','${t.status}')">
+      Update
+    </button>
 
-      </div>
-    `
+    <br><br>
+
+    ${
+      localStorage.getItem("role") === "hr"?
+       `<button class="btn"
+           onclick="analyzeTaskAI('${t._id}')">
+           Analyze with AI
+         </button>`
+      : ""
+    }
+
+  </div>
+`
 
     list.appendChild(div)
   })
@@ -110,8 +127,72 @@ async function updateStatus(id, current) {
 
   loadTasks()
 }
+async function analyzeTaskAI(taskId) {
 
+  // ✅ Check cache first
+  if (aiCache[taskId]) {
+    showModal(aiCache[taskId]);
+    return;
+  }
 
+  try {
+
+    document.getElementById("aiResult").innerHTML = "Analyzing...";
+    document.getElementById("aiModal").style.display = "block";
+
+    const res = await fetch('/admin/ai/analyze-ticket', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: localStorage.getItem('token')
+      },
+      body: JSON.stringify({ taskId })
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      alert(data.message || "AI failed");
+      return;
+    }
+
+    const result = data.data;
+
+    // ✅ Store in cache
+    aiCache[taskId] = result;
+
+    showModal(result);
+
+  } catch (err) {
+    console.error(err);
+    alert("AI request failed");
+  }
+}
+function showModal(result) {
+
+  const colorMap = {
+    High: "red",
+    Medium: "orange",
+    Low: "green"
+  };
+
+  document.getElementById("aiResult").innerHTML = `
+    <p><b>Priority:</b> 
+      <span style="color:${colorMap[result.priority] || 'black'}">
+        ${result.priority}
+      </span>
+    </p>
+
+    <p><b>Category:</b> ${result.category}</p>
+    <p><b>Team:</b> ${result.suggestedTeam}</p>
+    <p><b>Reason:</b> ${result.reasoning || 'N/A'}</p>
+  `;
+
+  document.getElementById("aiModal").style.display = "block";
+}
+function closeModal() {
+  document.getElementById("aiModal").style.display = "none"
+}
 // Init
 loadTasks()
 

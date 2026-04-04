@@ -63,7 +63,7 @@ router.get('/assigned', auth, role('hr', 'manager'), async (req, res) => {
 router.patch('/:id/status', auth, async (req, res) => {
 
   const task = await Task.findById(req.params.id)
-
+  
   if (!task)
     return res.status(404).json({ msg: 'Not found' })
 
