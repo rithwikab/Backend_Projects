@@ -19,8 +19,7 @@ exports.checkHash = async (hash) => {
 ================================ */
 
 exports.bulkInsert = async (
-  records,
-  hash
+  records
 ) => {
 
   const docs = records.map(r => ({
@@ -29,9 +28,7 @@ exports.bulkInsert = async (
 
     amount: Number(r.amount),
 
-    status: "UNMATCHED",
-
-    payload_hash: hash
+    status: "UNMATCHED"
   }));
 
   return await Transaction.insertMany(

@@ -191,14 +191,19 @@ function validate(r) {
 ================================================= */
 
 function hashBatch(records) {
-
   const sorted = [...records].sort((a, b) =>
     a.reference_no.localeCompare(b.reference_no)
   );
 
   return crypto
     .createHash("sha256")
-    .update(JSON.stringify(sorted))
+    .update(JSON.stringify(
+      sorted.map(r => ({
+        reference_no: r.reference_no,
+        amount: r.amount,
+        transaction_date: r.transaction_date
+      }))
+    ))
     .digest("hex");
 }
 exports.getTransactions = async (req, res) => {
