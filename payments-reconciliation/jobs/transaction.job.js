@@ -6,6 +6,8 @@ const UploadBatch =
 
 const AuditLog =
   require("../models/AuditLog");
+const crypto = require("crypto");
+
 
 exports.processTransactionUpload = async ({
   records,
@@ -21,16 +23,21 @@ exports.processTransactionUpload = async ({
     
     /* Normalize */
     const normalized = records.map(r => ({
-      ...r,
-      amount: Number(r.amount),
-      transaction_date: new Date(r.transaction_date),
-      status: "UNMATCHED"
-    }));
+  ...r,
+  amount: Number(r.amount),
+  transaction_date: new Date(r.transaction_date),
+  status: "UNMATCHED",
+  payload_hash: crypto
+    .createHash("sha256")
+    .update(
+      `${r.reference_no}-${r.amount}-${r.transaction_date}`
+    )
+    .digest("hex")
+}));
 
     /* Insert */
     const inserted = await TransactionRepo.bulkInsert(
-      normalized,
-      hash
+      normalized
     );
 
     /* Batch */

@@ -27,7 +27,6 @@ const transactionSchema = new mongoose.Schema({
 
  payload_hash: {
   type: String,
-  index: true,
   unique: true
 }
 
