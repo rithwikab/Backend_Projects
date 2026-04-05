@@ -12,6 +12,7 @@ const {
   Upload Transactions
 */
 exports.uploadTransactions = async (req, res, next) => {
+  
   try {
 
     /* ===============================
@@ -26,6 +27,7 @@ exports.uploadTransactions = async (req, res, next) => {
         ? req.body
         : req.body.records;
 
+        
       if (!Array.isArray(records)) {
         return res.status(400).json({
           success: false,
@@ -54,8 +56,7 @@ exports.uploadTransactions = async (req, res, next) => {
       });
     }
 
-    console.log("RAW BODY:", req.body);
-    console.log("RECORDS:", records);
+    
 
     /* ===============================
        STEP 2: VALIDATION
@@ -77,8 +78,8 @@ exports.uploadTransactions = async (req, res, next) => {
 
     console.log("VALID:", valid.length);
     console.log("INVALID:", invalid.length);
-
-    /* 🚨 CRITICAL FIX — EARLY RETURN */
+   
+    /* CRITICAL FIX — EARLY RETURN */
 
     if (valid.length === 0) {
       return res.status(400).json({
@@ -91,7 +92,7 @@ exports.uploadTransactions = async (req, res, next) => {
     /* ===============================
        STEP 3: IDEMPOTENCY CHECK
     ================================ */
-
+    
     const hash = hashBatch(valid);
 
     const exists = await TransactionRepo.checkHash(hash);
@@ -102,14 +103,14 @@ exports.uploadTransactions = async (req, res, next) => {
         error: "Duplicate upload"
       });
     }
-
+    
     /* ===============================
        STEP 4: ASYNC PROCESSING
     ================================ */
-
+    
     processTransactionUpload({
       records: valid,
-      user_id: req.user.id,
+      user_id: req.user?.id,
       hash,
       invalidCount: invalid.length,
       totalRecords: records.length

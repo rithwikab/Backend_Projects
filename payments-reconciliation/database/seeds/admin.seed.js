@@ -36,9 +36,7 @@ async function seedAdmin() {
       roles: ["admin"]
     });
 
-    console.log("Admin user created:");
-    console.log("Email: admin@test.com");
-    console.log("Password: admin123");
+    
 
     process.exit(0);
 

@@ -8,7 +8,7 @@ const AuditLog =
   require("../models/AuditLog");
 const crypto = require("crypto");
 
-
+console.log("🔥 JOB STARTED");
 exports.processTransactionUpload = async ({
   records,
   user_id,
