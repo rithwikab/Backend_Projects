@@ -18,23 +18,14 @@ exports.checkHash = async (hash) => {
    Bulk Insert
 ================================ */
 
-exports.bulkInsert = async (
-  records
-) => {
-
+exports.bulkInsert = async (records, batchId) => {
   const docs = records.map(r => ({
-
     ...r,
-
     amount: Number(r.amount),
-
-    status: "UNMATCHED"
+    status: "UNMATCHED",
+    upload_batch_id: batchId
   }));
-
-  return await Transaction.insertMany(
-    docs,
-    { ordered: false }
-  );
+  return await Transaction.insertMany(docs, { ordered: false });
 };
 const {
   decodeCursor,

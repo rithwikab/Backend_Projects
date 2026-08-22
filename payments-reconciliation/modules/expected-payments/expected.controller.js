@@ -1,6 +1,7 @@
 const csv = require("csv-parser");
 const fs = require("fs");
 const crypto = require("crypto");
+const { parseCSV } = require("../../utils/csvParser");
 
 const UploadBatch = require("../../models/UploadBatch");
 const ExpectedRepo = require("../../repositories/expected.repo");
@@ -93,64 +94,41 @@ exports.uploadExpectedPayments = async (req, res, next) => {
        STEP 3: Idempotency Hash
     ================================ */
 
-    const batchHash =
-      generateBatchHash(validRecords);
+    const batchHash = generateBatchHash(validRecords);
 
-    const exists =
-      await ExpectedRepo.checkImportHash(batchHash);
+for (const r of validRecords) {
+  r.amount = Number(r.amount);
+  r.due_date = new Date(r.due_date);
+  r.status = "PENDING";
+}
 
-    if (exists) {
+let batch;
+try {
+  batch = await UploadBatch.create({
+    user_id: req.user.id,
+    type: "expected",
+    total_records: records.length,
+    imported: 0,
+    rejected: invalidRecords.length,
+    status: "PENDING",
+    batch_hash: batchHash
+  });
+} catch (err) {
+  if (err.code === 11000) {
+    return res.status(409).json({ success: false, error: "Duplicate upload detected" });
+  }
+  throw err;
+}
 
-      return res.status(409).json({
-        success: false,
-        error: "Duplicate upload detected"
-      });
-    }
+const inserted = await ExpectedRepo.bulkInsert(validRecords, batchHash, req.user.id, batch._id);
+batch.imported = inserted.length;
+await batch.save();
 
-
-    /* ===============================
-       STEP 4: Normalize + Insert
-    ================================ */
-
-    for (const r of validRecords) {
-
-      r.amount = Number(r.amount);
-      r.due_date = new Date(r.due_date);
-      r.status = "PENDING";
-    }
-
-    const inserted =
-      await ExpectedRepo.bulkInsert(
-        validRecords,
-        batchHash,
-        req.user.id
-      );
-
-
-    /* ===============================
-       STEP 5: Batch Record
-    ================================ */
-
-    const batch = await UploadBatch.create({
-
-      user_id: req.user.id,
-
-      type: "expected",
-
-      total_records: records.length,
-
-      imported: inserted.length,
-
-      rejected: invalidRecords.length,
-
-      status: "PENDING"
-    });
-    
-      await AuditLog.create({
-      user_id: req.user.id,
-      action: "UPLOAD_EXPECTED",
-      meta: { batch_id: batch._id }
-    });
+await AuditLog.create({
+  user_id: req.user.id,
+  action: "UPLOAD_EXPECTED",
+  meta: { batch_id: batch._id }
+});
 
     /* ===============================
        RESPONSE
@@ -179,38 +157,6 @@ exports.uploadExpectedPayments = async (req, res, next) => {
     next(error);
   }
 };
-
-
-/* =================================================
-   CSV PARSER
-================================================= */
-
-function parseCSV(filePath) {
-
-  return new Promise((resolve, reject) => {
-
-    const results = [];
-
-    fs.createReadStream(filePath)
-
-      .pipe(csv())
-
-      .on("data", data => {
-        results.push(data);
-      })
-
-      .on("end", () => {
-
-        fs.unlinkSync(filePath);
-
-        resolve(results);
-      })
-
-      .on("error", err => {
-        reject(err);
-      });
-  });
-}
 
 
 /* =================================================

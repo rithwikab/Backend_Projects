@@ -41,10 +41,11 @@
     import_hash: String,
 
     created_by: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User"
-    }
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "User"
+  },
+  upload_batch_id: { type: mongoose.Schema.Types.ObjectId, ref: "UploadBatch" }
 
   }, { timestamps: true });
-
+  expectedSchema.index({ import_hash: 1 });
   module.exports = mongoose.model("ExpectedPayment", expectedSchema);

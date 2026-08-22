@@ -1,9 +1,9 @@
 const csv = require("csv-parser");
 const fs = require("fs");
 const crypto = require("crypto");
-
+const { parseCSV } = require("../../utils/csvParser");
 const TransactionRepo = require("../../repositories/transaction.repo");
-
+const UploadBatch = require("../../models/UploadBatch");
 const {
   processTransactionUpload
 } = require("../../jobs/transaction.job");
@@ -95,26 +95,32 @@ exports.uploadTransactions = async (req, res, next) => {
     
     const hash = hashBatch(valid);
 
-    const exists = await TransactionRepo.checkHash(hash);
+let batch;
+try {
+  batch = await UploadBatch.create({
+    user_id: req.user?.id,
+    type: "transaction",
+    total_records: records.length,
+    imported: 0,
+    rejected: invalid.length,
+    status: "PENDING",
+    batch_hash: hash
+  });
+} catch (err) {
+  if (err.code === 11000) {
+    return res.status(409).json({ success: false, error: "Duplicate upload" });
+  }
+  throw err;
+}
 
-    if (exists) {
-      return res.status(409).json({
-        success: false,
-        error: "Duplicate upload"
-      });
-    }
-    
-    /* ===============================
-       STEP 4: ASYNC PROCESSING
-    ================================ */
-    
-    processTransactionUpload({
-      records: valid,
-      user_id: req.user?.id,
-      hash,
-      invalidCount: invalid.length,
-      totalRecords: records.length
-    });
+processTransactionUpload({
+  records: valid,
+  user_id: req.user?.id,
+  hash,
+  invalidCount: invalid.length,
+  totalRecords: records.length,
+  batchId: batch._id
+});
 
     /* ===============================
        RESPONSE
@@ -137,24 +143,7 @@ exports.uploadTransactions = async (req, res, next) => {
 };
 
 
-/* =================================================
-   CSV PARSER
-================================================= */
 
-function parseCSV(filePath) {
-  return new Promise((resolve, reject) => {
-    const rows = [];
-
-    fs.createReadStream(filePath)
-      .pipe(csv())
-      .on("data", row => rows.push(row))
-      .on("end", () => {
-        fs.unlinkSync(filePath);
-        resolve(rows);
-      })
-      .on("error", reject);
-  });
-}
 
 
 /* =================================================

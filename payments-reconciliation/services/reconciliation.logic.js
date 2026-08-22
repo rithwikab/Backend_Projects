@@ -44,7 +44,7 @@ function reconcilePayments(expectedPayments, actualTransactions) {
     ----------------------------------------------- */
 
     let match = actual.find(tx =>
-      !usedTransactions.has(tx._id || tx._id || tx.id) &&
+      !usedTransactions.has(tx._id|| tx.id) &&
       tx.reference_no === exp.source_ref &&
       tx.currency === exp.currency &&
       Number(tx.amount) === remainingAmount
@@ -213,7 +213,7 @@ function buildResult(
     expectedId: expected._id || expected.id,
 
     transactionIds: transactions.map(
-      tx => tx._id || tx._id || tx._id || tx.id
+      tx => tx._id || tx.id
     ),
 
     // For reporting

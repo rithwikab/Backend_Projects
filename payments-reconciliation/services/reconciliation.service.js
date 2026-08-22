@@ -85,10 +85,13 @@ exports.runReconciliation = async () => {
       );
     }
 
-    await UploadBatch.updateMany(
-      { status: "PENDING" },
-      { status: "PROCESSED" }
-    );
+    const touchedBatchIds = [...new Set(expected.map(e => e.upload_batch_id?.toString()).filter(Boolean))];
+    if (touchedBatchIds.length) {
+      await UploadBatch.updateMany(
+        { _id: { $in: touchedBatchIds }, status: "PENDING" },
+        { status: "PROCESSED" }
+      );
+    }
   }
 
   /* Clear cache */
@@ -106,6 +109,7 @@ function mapExpectedStatus(status) {
   switch (status) {
     case "PERFECT_MATCH":
     case "AGGREGATED_MATCH":
+    case "AMOUNT_MATCH":
       return "PAID";
 
     case "PARTIAL_MATCH":

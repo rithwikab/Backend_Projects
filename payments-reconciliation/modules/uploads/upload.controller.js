@@ -4,8 +4,7 @@ const UploadBatch =
 
 exports.getMyUploads = async (req, res) => {
 
-  const limit =
-    parseInt(req.query.limit) || 5;
+  const limit = Math.min(parseInt(req.query.limit) || 5, 100);
 
   const cursor = req.query.cursor;
 

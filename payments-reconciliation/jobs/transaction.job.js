@@ -8,80 +8,29 @@ const AuditLog =
   require("../models/AuditLog");
 const crypto = require("crypto");
 
-console.log("🔥 JOB STARTED");
-exports.processTransactionUpload = async ({
-  records,
-  user_id,
-  hash,
-  invalidCount,
-  totalRecords
-}) => {
-
-  console.log("Processing records:", records.length);
-
+console.log("JOB STARTED");
+exports.processTransactionUpload = async ({ records, user_id, hash, invalidCount, totalRecords, batchId }) => {
   try {
-    
-    /* Normalize */
     const normalized = records.map(r => ({
-  ...r,
-  amount: Number(r.amount),
-  transaction_date: new Date(r.transaction_date),
-  status: "UNMATCHED",
-  payload_hash: crypto
-    .createHash("sha256")
-    .update(
-      `${r.reference_no}-${r.amount}-${r.transaction_date}`
-    )
-    .digest("hex")
-}));
+      ...r,
+      amount: Number(r.amount),
+      transaction_date: new Date(r.transaction_date),
+      status: "UNMATCHED",
+      payload_hash: crypto.createHash("sha256")
+        .update(`${r.reference_no}-${r.amount}-${r.transaction_date}`)
+        .digest("hex")
+    }));
 
-    /* Insert */
-    const inserted = await TransactionRepo.bulkInsert(
-      normalized
-    );
+    const inserted = await TransactionRepo.bulkInsert(normalized, batchId);
 
-    /* Batch */
-    const batch = await UploadBatch.create({
-      user_id,
-      type: "transaction",
-      total_records: totalRecords,
-      imported: inserted.length,
-      rejected: invalidCount,
-      status: "PROCESSED"
-    });
+    await UploadBatch.findByIdAndUpdate(batchId, { imported: inserted.length, status: "PROCESSED" });
+    await AuditLog.create({ user_id: user_id || null, action: "UPLOAD_TRANSACTION", meta: { batch_id: batchId } });
 
-    /* Audit */
-    await AuditLog.create({
-      user_id: user_id || null,
-      action: "UPLOAD_TRANSACTION",
-      meta: { batch_id: batch._id }
-    });
-
-    console.log("Job completed");
-
-    return { inserted, batch };
-    
+    return { inserted, batchId };
   } catch (err) {
-
-  console.error("Job failed:", err.message);
-
-  console.log("Retry recommended for batch"); // ✅ ADD HERE
-
-  await UploadBatch.create({
-    user_id: user_id || null,
-    type: "transaction",
-    total_records: totalRecords,
-    imported: 0,
-    rejected: totalRecords,
-    status: "FAILED"
-  });
-
-  await AuditLog.create({
-    user_id: user_id || null,
-    action: "UPLOAD_FAILED",
-    meta: { error: err.message }
-  });
-
-  return null;
-}
+    console.error("Job failed:", err.message);
+    await UploadBatch.findByIdAndUpdate(batchId, { imported: 0, rejected: totalRecords, status: "FAILED" });
+    await AuditLog.create({ user_id: user_id || null, action: "UPLOAD_FAILED", meta: { error: err.message, batch_id: batchId } });
+    return null;
+  }
 };

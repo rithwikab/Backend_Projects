@@ -25,15 +25,16 @@ const transactionSchema = new mongoose.Schema({
 
   raw_payload: Object,
 
- payload_hash: {
+payload_hash: {
   type: String,
   unique: true
-}
+},
+upload_batch_id: { type: mongoose.Schema.Types.ObjectId, ref: "UploadBatch" }
 
 }, { timestamps: true });
 
 /* ===============================
-   INDEXES (ADD THIS)
+   INDEXES 
 ================================ */
 
 transactionSchema.index({ createdAt: -1 });

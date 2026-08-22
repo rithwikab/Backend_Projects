@@ -33,19 +33,19 @@ const uploadBatchSchema = new mongoose.Schema({
   type: String,
   enum: [
     "PENDING",
-    "PROCESSED",   // ✅ ADD
-    "FAILED",      // ✅ ADD
+    "PROCESSED",   
+    "FAILED",      
     "RECONCILED",
     "PARTIAL"
   ],
   default: "PENDING"
 },
 
-  reconciliation_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Reconciliation"
-  }
-
+reconciliation_id: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Reconciliation"
+},
+batch_hash: { type: String, unique: true, sparse: true }
 }, { timestamps: true });
 
 module.exports = mongoose.model(
