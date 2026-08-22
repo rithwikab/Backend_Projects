@@ -104,15 +104,113 @@ Matching is based on:
 
 ---
 
+## 7. Webhook Payment Ingestion
+
+A payment provider can notify this system directly, instead of (or in addition to) manually uploading transaction files.
+
+```
+Payment Provider
+    ↓
+POST /api/v1/webhooks/payments
+    ↓
+HMAC-SHA256 signature verification (middleware/webhookSignature.middleware.js)
+    ↓
+Validate event shape (id / type / data)
+    ↓
+Idempotency check + persist (models/WebhookEvent.js, unique on provider+event_id)
+    ↓
+Async processing — reuses the existing fire-and-forget job pattern (jobs/webhook.job.js)
+    ↓
+Existing transaction ingestion path (repositories/transaction.repo.js)
+    ↓
+Existing, UNCHANGED reconciliation logic (services/reconciliation.logic.js)
+```
+
+### Configuration
+
+Add to `.env`:
+
+```
+WEBHOOK_SECRET=your_webhook_secret
+```
+
+### Endpoint
+
+`POST /api/v1/webhooks/payments` — no JWT required; authenticated via signature instead.
+
+`GET /api/v1/webhooks/events` — admin/analyst only, lists received webhook events (same access pattern as `/audit`).
+
+### Signature
+
+The header `x-webhook-signature` must be the hex-encoded HMAC-SHA256 of the **raw request body**, keyed with `WEBHOOK_SECRET`:
+
+```bash
+BODY='{"id":"evt_123","type":"payment.success","data":{"reference_no":"INV-101","customer_ref":"C1","amount":1000,"currency":"INR","transaction_date":"2026-02-02"}}'
+SIGNATURE=$(node -e "console.log(require('crypto').createHmac('sha256', process.env.WEBHOOK_SECRET).update(process.argv[1]).digest('hex'))" "$BODY")
+
+curl -X POST http://localhost:3000/api/v1/webhooks/payments \
+  -H "Content-Type: application/json" \
+  -H "x-webhook-signature: $SIGNATURE" \
+  -d "$BODY"
+```
+
+### Event format
+
+```json
+{
+  "id": "evt_123",
+  "type": "payment.success",
+  "provider": "generic",
+  "data": {
+    "reference_no": "INV-101",
+    "customer_ref": "C1",
+    "amount": 1000,
+    "currency": "INR",
+    "transaction_date": "2026-02-02"
+  }
+}
+```
+
+Supported `type` values: `payment.success`, `payment.failed`. Any other type is acknowledged with `200 { status: "ignored" }` and not processed.
+
+### Responses
+
+| Situation | Status | Body `status` |
+| --- | --- | --- |
+| Accepted, first delivery | 202 | `accepted` |
+| Duplicate delivery (same `event_id`) | 200 | `duplicate` |
+| Unsupported event type | 200 | `ignored` |
+| Missing/invalid signature | 401 | — |
+| Malformed JSON / missing required fields | 400 | — |
+| Server/config error | 500 | — |
+
+### Idempotency
+
+Uniqueness key: `provider + event_id`, DB-enforced via a unique index on `WebhookEvent` — the same hash/unique-index pattern already used for `UploadBatch.batch_hash` and `Transaction.payload_hash`. A `payment.success` event is additionally deduplicated at the resulting `Transaction`'s `payload_hash`, so the same underlying payment can't be double-counted even if it arrives via webhook AND a manual upload.
+
+### Running the webhook tests
+
+```bash
+BASE_URL=http://localhost:3000/api/v1 \
+WEBHOOK_SECRET=dev_webhook_secret_change_me \
+node Webhook.e2e.test.js
+```
+
+Requires the server and MongoDB running (same requirement as `Reconciliation.e2e.test.js`).
+
+---
+
 # Project Structure
 
 ```
 modules/
   transactions/
   expected-payments/
+  webhooks/
 
 jobs/
   transaction.job.js
+  webhook.job.js
 
 repositories/
   transaction.repo.js
@@ -121,9 +219,14 @@ models/
   Transaction.js
   UploadBatch.js
   AuditLog.js
+  WebhookEvent.js
 
 routes/
   ingestion.routes.js
+  webhook.routes.js
+
+middleware/
+  webhookSignature.middleware.js
 
 config/
   db.js

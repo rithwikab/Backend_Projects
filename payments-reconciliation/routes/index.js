@@ -11,4 +11,5 @@ router.use("/auth", authRoutes);
 router.use("/ingestion", ingestionRoutes);
 router.use("/reconciliation", reconciliationRoutes);
 router.use("/audit",require("./audit.routes"));
+router.use("/webhooks", require("./webhook.routes"));
 module.exports = router;

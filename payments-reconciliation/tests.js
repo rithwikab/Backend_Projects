@@ -6,7 +6,7 @@ function generateRecords(runId) {
 
   for (let i = 1; i <= 1000; i++) {
     records.push({
-      reference_no: `REF${runId}_${i}`,   
+      reference_no: `REF${runId}_${i}`,   // 👈 unique per request
       customer_ref: `CUST${i}`,
       amount: Math.floor(Math.random() * 1000),
       currency: "INR",

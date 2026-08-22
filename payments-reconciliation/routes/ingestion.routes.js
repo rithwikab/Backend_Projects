@@ -26,7 +26,7 @@ router.post(
   "/expected-payments/upload",
   auth,
   rbac(["admin", "operations"]),
-  upload.single("file"),   
+  upload.single("file"),   // 👈 enables file
   uploadExpectedPayments
 );
 
