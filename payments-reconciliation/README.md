@@ -200,6 +200,51 @@ Requires the server and MongoDB running (same requirement as `Reconciliation.e2e
 
 ---
 
+## 8. Background Processing (Redis + BullMQ)
+
+Transaction uploads, webhook events, and reconciliation are processed by **BullMQ**, backed by Redis — run by a separate `worker.js` process, not inline in the API process.
+
+```
+API process (server.js)                    Worker process (worker.js)
+─────────────────────────                  ──────────────────────────
+POST /transactions/upload                   workers/transaction.worker.js
+  → transactionQueue.add(...)  ──Redis──►     → processTransactionUpload()
+
+POST /webhooks/payments                     workers/webhook.worker.js
+  → webhookQueue.add(...)      ──Redis──►     → processWebhookEvent()
+
+(startup) reconciliationQueue               workers/reconciliation.worker.js
+  .add(..., {repeat: "0 */6 * * *"}) ──►      → runReconciliation() every 6h
+```
+
+**Why a separate process, not just a library call:** the job is durably written to Redis *before* the API responds — if the API process crashes right after responding, the job survives and the worker (a different, independently-running process) still picks it up. The previous fire-and-forget version couldn't guarantee that; see `WEBHOOK_INTERVIEW_NOTES.md` for the full before/after.
+
+**Retry behavior:** each job retries up to 3 times with exponential backoff (`queues/*.js`) before being marked as permanently failed (`UploadBatch.status`/`WebhookEvent.status` = `FAILED`, written by the worker's `failed` event, not by the job function itself).
+
+**Running locally (two processes now, not one):**
+
+```bash
+# terminal 1
+npm run dev
+
+# terminal 2
+npm run worker
+```
+
+Or via Docker, both are already separate services:
+
+```bash
+docker-compose up --build
+```
+
+**Env var:**
+
+```
+REDIS_URL=redis://localhost:6379    # or redis://redis:6379 inside docker-compose
+```
+
+---
+
 # Project Structure
 
 ```
@@ -211,6 +256,20 @@ modules/
 jobs/
   transaction.job.js
   webhook.job.js
+  reconcile.job.js
+
+queues/
+  connection.js
+  transactionQueue.js
+  webhookQueue.js
+  reconciliationQueue.js
+
+workers/
+  transaction.worker.js
+  webhook.worker.js
+  reconciliation.worker.js
+
+worker.js
 
 repositories/
   transaction.repo.js
@@ -246,8 +305,10 @@ docker-compose up --build
 
 ## 2. Services
 
-* **App** → Node.js (port 3000)
+* **App** → Node.js API (port 3000)
+* **Worker** → Node.js background job processor (no exposed port — consumes from Redis)
 * **MongoDB** → port 27017
+* **Redis** → port 6379
 
 ---
 
@@ -257,6 +318,8 @@ docker-compose up --build
 MONGO_URI=mongodb://mongo:27017/reconciliation_db
 JWT_SECRET=your_secret
 JWT_EXPIRES_IN=1h
+WEBHOOK_SECRET=your_webhook_secret
+REDIS_URL=redis://redis:6379
 ```
 
 ---

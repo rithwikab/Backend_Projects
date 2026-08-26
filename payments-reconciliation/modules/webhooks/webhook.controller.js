@@ -1,9 +1,7 @@
 const crypto = require("crypto");
 
 const WebhookEvent = require("../../models/WebhookEvent");
-const {
-  processWebhookEvent
-} = require("../../jobs/webhook.job");
+const webhookQueue = require("../../queues/webhookQueue");
 
 const {
   decodeCursor,
@@ -123,20 +121,18 @@ exports.handlePaymentWebhook = async (req, res, next) => {
     /* ===============================
        STEP 5: QUEUE ASYNC PROCESSING
 
-       Reuses this project's existing convention (jobs/*.job.js,
-       fire-and-forget, called without awaiting) — the same
-       pattern already used for transaction uploads. No external
-       queue technology exists in this codebase; see
-       WEBHOOK_INTERVIEW_NOTES.md for why that's a deliberate,
-       named limitation rather than something silently glossed
-       over.
+       Only the WebhookEvent's _id is enqueued, not the full
+       document — the worker re-fetches it fresh from MongoDB (see
+       workers/webhook.worker.js). Awaiting queue.add() here means
+       the job is durably persisted in Redis BEFORE this function
+       returns 202 — if this process crashed the instant after,
+       the job survives and the separate worker process still
+       picks it up. That's the actual gap this replaces (see
+       WEBHOOK_INTERVIEW_NOTES.md, Section 8, scenario F, for what
+       the fire-and-forget version could NOT guarantee).
     ================================ */
-    processWebhookEvent(webhookEvent).catch(err => {
-      // processWebhookEvent already catches and persists its own
-      // failures onto the WebhookEvent doc. This .catch() is only
-      // a backstop against a truly unexpected throw becoming an
-      // unhandled promise rejection.
-      console.error("Unhandled webhook processing error:", err);
+    await webhookQueue.add("process-event", {
+      webhookEventId: webhookEvent._id.toString()
     });
 
     return res.status(202).json({

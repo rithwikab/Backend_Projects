@@ -5,52 +5,36 @@ const TransactionRepo = require("../repositories/transaction.repo");
 const AuditLog = require("../models/AuditLog");
 
 /*
-  Worker-equivalent for this codebase's existing fire-and-forget
-  job pattern (see jobs/transaction.job.js — same shape: an async
-  function called without awaiting, with its own try/catch as the
-  only safety net). No external queue library exists in this
-  project, so this function IS "the worker", same as
-  processTransactionUpload already is for CSV/JSON uploads.
+  NOTE: this function no longer has its own outer try/catch (see
+  WEBHOOK_INTERVIEW_NOTES.md for the prior fire-and-forget version,
+  which caught everything here and immediately marked the
+  WebhookEvent as FAILED on the very first error).
+
+  Now that this is invoked by workers/webhook.worker.js as a BullMQ
+  job processor, retry policy belongs at the queue layer: if this
+  throws, BullMQ retries per queues/webhookQueue.js's configured
+  attempts/backoff, and only the worker's 'failed' event (after all
+  attempts are exhausted) marks the WebhookEvent as FAILED. This
+  function's only job now is: succeed, or throw.
+
+  The INNER try/catch inside handlePaymentSuccess() below is
+  different and intentionally stays — that one distinguishes "this
+  is actually a duplicate, not a failure" from a real error, which
+  has nothing to do with retry policy.
 */
 exports.processWebhookEvent = async (webhookEvent) => {
-  try {
 
-    if (webhookEvent.event_type === "payment.success") {
-      await handlePaymentSuccess(webhookEvent);
-    } else if (webhookEvent.event_type === "payment.failed") {
-      await handlePaymentFailed(webhookEvent);
-    }
-    // Unsupported types never reach here — filtered out in the
-    // controller before a WebhookEvent row is even created.
-
-    await WebhookEvent.findByIdAndUpdate(webhookEvent._id, {
-      status: "PROCESSED"
-    });
-
-  } catch (err) {
-    console.error("Webhook job failed:", err.message);
-
-    await WebhookEvent.findByIdAndUpdate(webhookEvent._id, {
-      status: "FAILED",
-      error_message: err.message
-    });
-
-    await AuditLog.create({
-      user_id: null,
-      action: "WEBHOOK_PROCESSING_FAILED",
-      meta: { event_id: webhookEvent.event_id, error: err.message }
-    });
-    // No automatic retry: this codebase has no retry mechanism for
-    // ANY of its existing background jobs either (see
-    // jobs/transaction.job.js). What's genuinely different here is
-    // that the failure is durable and addressable — a FAILED
-    // WebhookEvent row is a re-runnable unit (re-invoke
-    // processWebhookEvent(webhookEvent) with the same doc), unlike
-    // a failed transaction upload job, which has no persisted
-    // retry point at all. True automatic retry (backoff, max
-    // attempts) is explicitly NOT implemented — see
-    // WEBHOOK_INTERVIEW_NOTES.md, section 8.
+  if (webhookEvent.event_type === "payment.success") {
+    await handlePaymentSuccess(webhookEvent);
+  } else if (webhookEvent.event_type === "payment.failed") {
+    await handlePaymentFailed(webhookEvent);
   }
+  // Unsupported types never reach here — filtered out in the
+  // controller before a WebhookEvent row is even created.
+
+  await WebhookEvent.findByIdAndUpdate(webhookEvent._id, {
+    status: "PROCESSED"
+  });
 };
 
 /* ===============================

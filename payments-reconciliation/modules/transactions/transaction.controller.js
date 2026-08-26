@@ -4,9 +4,7 @@ const crypto = require("crypto");
 const { parseCSV } = require("../../utils/csvParser");
 const TransactionRepo = require("../../repositories/transaction.repo");
 const UploadBatch = require("../../models/UploadBatch");
-const {
-  processTransactionUpload
-} = require("../../jobs/transaction.job");
+const transactionQueue = require("../../queues/transactionQueue");
 
 /*
   Upload Transactions
@@ -113,13 +111,22 @@ try {
   throw err;
 }
 
-processTransactionUpload({
+/*
+  Enqueue instead of calling processTransactionUpload directly.
+  The job is now persisted in Redis BEFORE this function returns —
+  if the app process crashes the instant after this line runs, the
+  job survives and a worker (running as a separate process, see
+  worker.js) will still pick it up. That durability is exactly what
+  the old fire-and-forget call ("await-less async function call")
+  could not guarantee.
+*/
+await transactionQueue.add("process-upload", {
   records: valid,
   user_id: req.user?.id,
   hash,
   invalidCount: invalid.length,
   totalRecords: records.length,
-  batchId: batch._id
+  batchId: batch._id.toString()
 });
 
     /* ===============================

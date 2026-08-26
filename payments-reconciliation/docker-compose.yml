@@ -9,6 +9,16 @@ services:
       - .env
     depends_on:
       - mongo
+      - redis
+
+  worker:
+    build: .
+    command: ["node", "worker.js"]
+    env_file:
+      - .env
+    depends_on:
+      - mongo
+      - redis
 
   mongo:
     image: mongo:6
@@ -17,5 +27,13 @@ services:
     volumes:
       - mongo-data:/data/db
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
 volumes:
   mongo-data:
+  redis-data:

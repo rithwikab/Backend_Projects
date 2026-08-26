@@ -23,11 +23,13 @@
  *   node Webhook.e2e.test.js
  *
  * Requires Node 18+ (uses global fetch and crypto). No npm dependencies.
- * Requires a running server + MongoDB (same requirement as
- * Reconciliation.e2e.test.js — this could not be executed inside the
- * sandboxed environment used to build this feature; see the
- * accompanying report for what WAS verified there: syntax checks and
- * a require-time load of the full Express app).
+ * Requires a running server + MongoDB + Redis + the worker process
+ * (`npm run worker`, or the "worker" service in docker-compose) —
+ * since transaction/webhook processing now goes through BullMQ,
+ * nothing gets processed unless a worker is actually consuming the
+ * queue. This could not be executed in the sandboxed environment
+ * used to build this feature; see the accompanying report for what
+ * WAS verified there: syntax checks and a require-time load check.
  */
 
 const crypto = require("crypto");
@@ -153,7 +155,7 @@ async function run() {
   );
 
   /* Give the fire-and-forget job a moment to run */
-  await sleep(1500);
+  await sleep(2500);
 
   /* =========================================================
      5 & 9. FIRST DELIVERY PROCESSED INTO A TRANSACTION
@@ -169,7 +171,7 @@ async function run() {
   const resDup = await postWebhook(rawA, sign(rawA));
   record("6. Duplicate delivery acknowledged as duplicate (200)", resDup.status === 200 && resDup.data?.status === "duplicate", `status=${resDup.status} body=${JSON.stringify(resDup.data)}`);
 
-  await sleep(500);
+  await sleep(1000);
   const txnListAfterDup = await api("GET", `/ingestion/transactions?limit=50`, token);
   const matchingTxns = (txnListAfterDup.data?.items || []).filter(t => t.reference_no === refA);
   record("6b. Duplicate did NOT create a second Transaction", matchingTxns.length === 1, `count=${matchingTxns.length}`);
@@ -195,7 +197,7 @@ async function run() {
   const resBad = await postWebhook(rawBad, sign(rawBad));
   record("8a. Structurally valid but semantically bad event still accepted (202)", resBad.status === 202, `status=${resBad.status}`);
 
-  await sleep(1500);
+  await sleep(2500);
   const eventsAfterBad = await api("GET", `/webhooks/events?status=FAILED&limit=50`, token);
   const failedRecord = (eventsAfterBad.data?.items || []).find(e => e.event_id === badEvent.id);
   record("8b. Bad event ends in FAILED status with an error_message", !!failedRecord && !!failedRecord.error_message, failedRecord ? failedRecord.error_message : "not found");
