@@ -24,7 +24,7 @@
     "csv-parser": "^3.2.0",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.2.1",
+    "express-rate-limit": "^8.7.0",
     "express-validator": "^7.3.1",
     "ioredis": "^5.4.2",
     "jsonwebtoken": "^9.0.3",

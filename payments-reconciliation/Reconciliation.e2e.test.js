@@ -14,7 +14,7 @@
 
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000/api/v1";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@test.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "123456";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 
 const ts = Date.now(); // uniqueness salt so repeat runs never collide with old data
 const results = []; // { name, pass, detail }
@@ -145,13 +145,49 @@ const transactions = [
     [`T${ts}-1`, "PAID", "PERFECT_MATCH -> should be PAID"],
     [`T${ts}-2`, "PARTIAL", "PARTIAL_MATCH -> should be PARTIAL"],
     [`T${ts}-3`, "PAID", "AGGREGATED_MATCH by ref -> should be PAID"],
-    [`T${ts}-4`, "PAID", "AMOUNT_MATCH -> should be PAID"],
-    [`T${ts}-5`, "PAID", "AGGREGATED_MATCH no ref -> should be PAID"],
     [`T${ts}-6`, "PENDING", "MISSING -> should stay PENDING"],
   ];
   for (const [ref, expectedStatus, label] of checks) {
     const row = byRef(ref);
     record(`Expected payment ${ref}: ${label}`, row?.status === expectedStatus, `actual=${row?.status}`);
+  }
+
+  // T4 (AMOUNT_MATCH) and T5 (AGGREGATED_MATCH, no reference) are
+  // low-confidence, no-reference-number matches. The review
+  // workflow deliberately holds these as PENDING_REVIEW instead of
+  // auto-committing them — verify they're held, confirm them
+  // through the new endpoint, then verify they become PAID only
+  // after that explicit human action.
+  const reviewRefs = [
+    [`T${ts}-4`, "AMOUNT_MATCH (no reference) -> should be held for review, not auto-PAID"],
+    [`T${ts}-5`, "AGGREGATED_MATCH no ref -> should be held for review, not auto-PAID"],
+  ];
+  for (const [ref, label] of reviewRefs) {
+    const row = byRef(ref);
+    record(`Expected payment ${ref}: ${label}`, row?.status === "PENDING", `actual=${row?.status}`);
+  }
+
+  const pending = await api("GET", "/reconciliation/pending-review?limit=50", token);
+  const pendingItems = pending.data?.data?.items || [];
+  record("Pending-review queue contains both fuzzy matches", pendingItems.length >= 2, `count=${pendingItems.length}`);
+
+  for (const ref of [`T${ts}-4`, `T${ts}-5`]) {
+    const item = pendingItems.find(p => p.expected_payment_id?.source_ref === ref);
+    if (!item) {
+      record(`Confirm suggested match for ${ref}`, false, "not found in pending-review queue");
+      continue;
+    }
+    const confirmRes = await api("POST", `/reconciliation/${item._id}/confirm`, token);
+    record(`Confirm suggested match for ${ref}`, confirmRes.status === 200, `status=${confirmRes.status}`);
+  }
+
+  const expListAfterConfirm = await api("GET", "/ingestion/expected-payments?limit=100", token);
+  const expRowsAfterConfirm = expListAfterConfirm.data?.data?.items || expListAfterConfirm.data?.items || [];
+  const byRefAfterConfirm = ref => expRowsAfterConfirm.find(r => r.source_ref === ref);
+
+  for (const ref of [`T${ts}-4`, `T${ts}-5`]) {
+    const row = byRefAfterConfirm(ref);
+    record(`Expected payment ${ref}: PAID after human confirmation`, row?.status === "PAID", `actual=${row?.status}`);
   }
 
   // 8. Fetch transactions and check orphan stays UNMATCHED

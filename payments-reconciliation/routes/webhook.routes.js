@@ -4,6 +4,7 @@ const router = express.Router();
 const auth = require("../middleware/auth.middleware");
 const rbac = require("../middleware/rbac.middleware");
 const verifySignature = require("../middleware/webhookSignature.middleware");
+const { webhookLimiter } = require("../middleware/rateLimiter.middleware");
 
 const {
   handlePaymentWebhook,
@@ -15,9 +16,12 @@ const {
   Access: none (external caller, not one of our own users) —
   authenticated via HMAC signature instead of a JWT. See
   webhookSignature.middleware.js and app.js (raw body capture).
+  Rate-limited BEFORE signature verification — reject cheaply
+  before spending a HMAC computation on abusive traffic.
 */
 router.post(
   "/payments",
+  webhookLimiter,
   verifySignature,
   handlePaymentWebhook
 );

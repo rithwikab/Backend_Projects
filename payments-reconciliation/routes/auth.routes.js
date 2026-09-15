@@ -3,6 +3,7 @@ const router = express.Router();
 
 const auth = require("../middleware/auth.middleware");
 const rbac = require("../middleware/rbac.middleware");
+const { loginLimiter } = require("../middleware/rateLimiter.middleware");
 
 const {
   login
@@ -13,7 +14,7 @@ const {
 } = require("../modules/auth/register.controller");
 
 /* Login */
-router.post("/login", login);
+router.post("/login", loginLimiter, login);
 
 /* Register (Admin only) */
 router.post(

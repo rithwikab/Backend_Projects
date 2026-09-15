@@ -37,8 +37,24 @@ exports.processTransactionUpload = async ({ records, user_id, hash, invalidCount
 
   const inserted = await TransactionRepo.bulkInsert(normalized, batchId);
 
-  await UploadBatch.findByIdAndUpdate(batchId, { imported: inserted.length, status: "PROCESSED" });
-  await AuditLog.create({ user_id: user_id || null, action: "UPLOAD_TRANSACTION", meta: { batch_id: batchId } });
+  // With the bulkInsert fix (repositories/transaction.repo.js),
+  // inserted.length can now be LESS than normalized.length even on
+  // a successful call — the difference is duplicates that were
+  // correctly skipped, not a failure. Recorded here so UploadBatch
+  // reflects reality instead of always showing 0 rejected on a
+  // partially-duplicate batch.
+  const duplicatesSkipped = normalized.length - inserted.length;
+
+  await UploadBatch.findByIdAndUpdate(batchId, {
+    imported: inserted.length,
+    rejected: duplicatesSkipped,
+    status: "PROCESSED"
+  });
+  await AuditLog.create({
+    user_id: user_id || null,
+    action: "UPLOAD_TRANSACTION",
+    meta: { batch_id: batchId, imported: inserted.length, duplicatesSkipped }
+  });
 
   return { inserted: inserted.length, batchId };
 };

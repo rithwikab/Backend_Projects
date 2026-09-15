@@ -17,16 +17,16 @@
  *      accurate rejected/error record — proving retry policy now
  *      lives in the worker (workers/*.js's 'failed' handler), not in
  *      jobs/transaction.job.js / jobs/webhook.job.js themselves.
- *   4. A REAL, documented edge case: a transaction batch that
- *      contains one duplicate record among otherwise-new records
- *      causes insertMany({ordered:false}) to still REJECT (because
- *      at least one write errored), even though the non-duplicate
- *      records were already persisted before the rejection. That
- *      means a batch can end up marked FAILED in UploadBatch while
- *      some of its records genuinely did make it into the database.
- *      This test asserts that this is exactly what happens — it is
- *      not fixed here, only proven and documented, since fixing it
- *      is a repository-layer change outside "add a queue" scope.
+ *   4. A bug this exact test surfaced (and is now fixed): a
+ *      transaction batch containing one duplicate record among
+ *      otherwise-new records used to cause insertMany({ordered:false})
+ *      to REJECT the whole call — even though the non-duplicate
+ *      records were already persisted — so the batch was wrongly
+ *      marked entirely FAILED. repositories/transaction.repo.js's
+ *      bulkInsert now treats a pure duplicate as an expected outcome
+ *      and returns what actually succeeded. This test verifies the
+ *      FIXED behavior: the batch now ends PROCESSED with accurate
+ *      imported/rejected counts.
  *   5. Existing reconciliation (untouched by this feature) still
  *      works end-to-end on a queue-processed transaction.
  *
@@ -193,12 +193,19 @@ async function run() {
   );
 
   /* =========================================================
-     4. DOCUMENTED EDGE CASE: partial-duplicate batch
+     4. FIXED BEHAVIOR CHECK: partial-duplicate batch
      Upload record X, then a second batch containing X again
-     (duplicate payload_hash) PLUS a new record Y. insertMany
-     with {ordered:false} still REJECTS the whole call because X
-     errors — even though Y gets persisted before that rejection.
-     Expect: batch ends up FAILED, but Y is still findable.
+     (duplicate payload_hash) PLUS a new record Y.
+
+     BEFORE THE FIX: insertMany with {ordered:false} still REJECTED
+     the whole call because X errored — even though Y got persisted
+     before that rejection — so the batch was incorrectly marked
+     entirely FAILED despite Y actually succeeding.
+
+     AFTER THE FIX (repositories/transaction.repo.js's bulkInsert):
+     the duplicate is treated as an expected, benign outcome. The
+     batch should now end up PROCESSED with imported:1, rejected:1 —
+     an accurate count — not FAILED.
   ========================================================= */
   const refX = `QREF-${ts}-X`;
   const refY = `QREF-${ts}-Y`;
@@ -244,30 +251,26 @@ async function run() {
     return (list.data?.items || []).find(t => t.reference_no === refY);
   }, 15000);
   record(
-    "4c. Y was persisted despite the batch ultimately failing",
+    "4c. Y was persisted (the non-duplicate record in the batch)",
     !!yResult,
-    yResult ? "Y found in DB" : "Y not found — behavior may differ from what's documented"
+    yResult ? "Y found in DB" : "Y not found within timeout"
   );
 
-  const batchFailed = await waitUntil(async () => {
+  const batchProcessed = await waitUntil(async () => {
     const uploads = await api("GET", "/uploads/my?limit=50", token);
-    // Note: /uploads/my wraps its payload as {success, data:{items,...}},
-    // while /ingestion/transactions returns {items,...} directly — a
-    // real, pre-existing response-shape inconsistency between these
-    // two endpoints, unrelated to the queue feature. Handled here
+    // /uploads/my wraps its payload as {success, data:{items,...}},
+    // while /ingestion/transactions returns {items,...} directly —
+    // a real, pre-existing response-shape inconsistency between
+    // these two endpoints, unrelated to this fix. Handled here
     // correctly, not a bug in this test.
-    // workers/transaction.worker.js's 'failed' handler sets
-    // rejected = totalRecords (the ORIGINAL upload count, 2 here —
-    // both X and Y individually passed controller validation; the
-    // failure is a DB-level duplicate, not a validation rejection).
     return (uploads.data?.data?.items || []).find(
-      u => u.status === "FAILED" && u.total_records === 2 && u.rejected === 2 && u.imported === 0
+      u => u.total_records === 2 && u.status === "PROCESSED" && u.imported === 1 && u.rejected === 1
     );
-  }, 30000, 3000);
+  }, 15000, 2000);
   record(
-    "4d. Batch containing the duplicate ends up FAILED overall (documented, not fixed)",
-    !!batchFailed,
-    batchFailed ? "confirmed: ordered:false still rejects the whole insertMany on any duplicate" : "batch did not reach FAILED — re-check bulkInsert behavior, this may have changed"
+    "4d. Batch correctly ends PROCESSED with accurate imported/rejected counts (bug fixed)",
+    !!batchProcessed,
+    batchProcessed ? "confirmed: duplicate no longer fails the whole batch" : "batch did not reach the expected PROCESSED state — check the bulkInsert fix"
   );
 
   /* =========================================================
@@ -290,7 +293,25 @@ async function run() {
   record("5b. Manual reconciliation trigger still works (unaffected by queue change)", reconRun.status === 200, `status=${reconRun.status}`);
 
   const expList = await api("GET", "/ingestion/expected-payments?limit=50", token);
-  const matched = (expList.data?.items || []).find(e => e.source_ref === refHappy);
+  const expItems = expList.data?.data?.items || expList.data?.items || [];
+  const matched = expItems.find(e => e.source_ref === refHappy);
+
+  if (matched && matched.status !== "PAID") {
+    // Diagnostic aid, not part of the pass/fail itself: if this
+    // invoice ended up something other than PAID, print the
+    // surrounding state so it's clear whether this is a fresh-DB
+    // issue (shouldn't happen) or leftover data from earlier test
+    // runs colliding via Rules 3/4's looser amount+customer
+    // matching (very likely if the DB wasn't cleared between runs).
+    const txList = await api("GET", "/ingestion/transactions?limit=100", token);
+    const ownTxn = (txList.data?.items || []).find(t => t.reference_no === refHappy);
+    console.log("\n--- 5c diagnostic ---");
+    console.log("Invoice status:", matched.status, "| full doc:", JSON.stringify(matched));
+    console.log("Its transaction status:", ownTxn ? ownTxn.status : "not found", "| full doc:", JSON.stringify(ownTxn));
+    console.log("If the DB has leftover PENDING/UNMATCHED records from earlier test runs, clear it and re-run.");
+    console.log("---------------------\n");
+  }
+
   record(
     "5c. Queue-processed transaction correctly reconciled by unchanged matching logic",
     !!matched && matched.status === "PAID",

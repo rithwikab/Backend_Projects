@@ -21,6 +21,28 @@ const reconciliationSchema = new mongoose.Schema({
 
   status: String,
 
+  /*
+    NEW: distinguishes high-confidence, reference-based matches
+    (auto-applied immediately, as before) from low-confidence,
+    amount-only matches (held for human review before they can
+    change any ExpectedPayment/Transaction status). See
+    services/reconciliation.logic.js's requiresReview flag and
+    services/reconciliation.service.js's runReconciliation.
+
+    AUTO_CONFIRMED — Rule 1/2 result, committed immediately (old
+                     behavior, unchanged for these).
+    PENDING_REVIEW — Rule 3/4 result, NOT yet committed.
+    CONFIRMED      — was PENDING_REVIEW, a human approved it.
+    REJECTED       — was PENDING_REVIEW, a human rejected it; the
+                     underlying ExpectedPayment/Transaction were
+                     never touched and remain exactly as they were.
+  */
+  review_status: {
+    type: String,
+    enum: ["AUTO_CONFIRMED", "PENDING_REVIEW", "CONFIRMED", "REJECTED"],
+    default: "AUTO_CONFIRMED"
+  },
+
   variance_amount: Number,
 
   method: String,
@@ -35,5 +57,6 @@ const reconciliationSchema = new mongoose.Schema({
 }, { timestamps: true });
 reconciliationSchema.index({ expected_payment_id: 1 });
 reconciliationSchema.index({ status: 1 });
+reconciliationSchema.index({ review_status: 1 });
 reconciliationSchema.index({ createdAt: -1 });
 module.exports = mongoose.model("Reconciliation", reconciliationSchema);

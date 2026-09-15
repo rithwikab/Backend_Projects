@@ -36,7 +36,7 @@ const crypto = require("crypto");
 
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000/api/v1";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@test.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "123456";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "dev_webhook_secret_change_me";
 
 const ts = Date.now();
@@ -49,6 +49,18 @@ function record(name, pass, detail = "") {
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
+}
+
+/* Waits until check() returns a truthy result, or gives up after timeoutMs. */
+async function waitUntil(check, timeoutMs, intervalMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = null;
+  while (Date.now() < deadline) {
+    last = await check();
+    if (last) return last;
+    await sleep(intervalMs);
+  }
+  return last;
 }
 
 function sign(rawBody, secret = WEBHOOK_SECRET) {
@@ -197,10 +209,19 @@ async function run() {
   const resBad = await postWebhook(rawBad, sign(rawBad));
   record("8a. Structurally valid but semantically bad event still accepted (202)", resBad.status === 202, `status=${resBad.status}`);
 
-  await sleep(2500);
-  const eventsAfterBad = await api("GET", `/webhooks/events?status=FAILED&limit=50`, token);
-  const failedRecord = (eventsAfterBad.data?.items || []).find(e => e.event_id === badEvent.id);
-  record("8b. Bad event ends in FAILED status with an error_message", !!failedRecord && !!failedRecord.error_message, failedRecord ? failedRecord.error_message : "not found");
+  /*
+    BullMQ retries this 3x with exponential backoff (see
+    queues/webhookQueue.js: delay:5000 -> gaps of ~5s then ~10s,
+    roughly 15s minimum before the terminal failure is recorded).
+    A flat short sleep here used to be enough back when this file
+    predated the queue (near-instant fire-and-forget failure) — now
+    it isn't, so this polls instead of guessing a fixed wait.
+  */
+  const failedRecord = await waitUntil(async () => {
+    const eventsAfterBad = await api("GET", `/webhooks/events?status=FAILED&limit=50`, token);
+    return (eventsAfterBad.data?.items || []).find(e => e.event_id === badEvent.id);
+  }, 30000, 3000);
+  record("8b. Bad event ends in FAILED status with an error_message", !!failedRecord && !!failedRecord.error_message, failedRecord ? failedRecord.error_message : "never reached FAILED within timeout");
 
   /* =========================================================
      10. EXISTING RECONCILIATION BEHAVIOR REMAINS INTACT
@@ -223,7 +244,8 @@ async function run() {
   record("10b. Reconciliation run triggered", reconRun.status === 200, `status=${reconRun.status}`);
 
   const expList = await api("GET", "/ingestion/expected-payments?limit=50", token);
-  const matchedInvoice = (expList.data?.items || []).find(e => e.source_ref === refA);
+  const expItems = expList.data?.data?.items || expList.data?.items || [];
+  const matchedInvoice = expItems.find(e => e.source_ref === refA);
   record(
     "10c. Webhook-sourced transaction correctly matched by EXISTING reconciliation logic",
     !!matchedInvoice && matchedInvoice.status === "PAID",

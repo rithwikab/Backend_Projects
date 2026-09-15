@@ -23,6 +23,23 @@ exports.login = async (req, res) => {
       });
     }
 
+    /*
+      FIXED BUG: isActive existed on the User model but was never
+      checked anywhere — a deactivated account could still log in
+      and receive a fully valid JWT. Deliberately kept the SAME
+      generic "Invalid credentials" message as the other 401s
+      below, rather than a distinct "account disabled" message —
+      that would leak account-existence/status to an unauthenticated
+      caller, the same class of leak the original code already
+      avoided between "no such user" and "wrong password".
+    */
+    if (!user.isActive) {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid credentials"
+      });
+    }
+
     // 2. Compare password
     const valid = await bcrypt.compare(
       password,

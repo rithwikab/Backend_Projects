@@ -76,28 +76,26 @@ async function handlePaymentSuccess(webhookEvent) {
     payload_hash
   };
 
-  let inserted;
-  try {
-    inserted = await TransactionRepo.bulkInsert([record], null);
-  } catch (err) {
-    const isDuplicateKey =
-      err.code === 11000 ||
-      (Array.isArray(err.writeErrors) && err.writeErrors.every(e => e.code === 11000));
+  /*
+    With the bulkInsert fix (repositories/transaction.repo.js), a
+    pure duplicate no longer throws — it returns an empty array
+    instead. That replaces the try/catch this function used to need
+    here (checking err.code === 11000): the duplicate case is now a
+    normal, non-exceptional return value, not an error to catch.
+  */
+  const inserted = await TransactionRepo.bulkInsert([record], null);
 
-    if (isDuplicateKey) {
-      // Not a failure — the same underlying payment already exists
-      // as a Transaction (e.g. it was also uploaded manually, or a
-      // different webhook event happened to describe the same
-      // reference/amount/date). This IS the existing record-level
-      // idempotency guarantee doing its job via a second path.
-      await AuditLog.create({
-        user_id: null,
-        action: "WEBHOOK_PAYMENT_DUPLICATE_TRANSACTION",
-        meta: { event_id: webhookEvent.event_id, reference_no }
-      });
-      return;
-    }
-    throw err;
+  if (inserted.length === 0) {
+    // The one record we tried to insert was entirely a duplicate —
+    // not a failure, this IS the record-level idempotency
+    // guarantee doing its job via a second path (webhook vs.
+    // manual upload describing the same underlying payment).
+    await AuditLog.create({
+      user_id: null,
+      action: "WEBHOOK_PAYMENT_DUPLICATE_TRANSACTION",
+      meta: { event_id: webhookEvent.event_id, reference_no }
+    });
+    return;
   }
 
   const transaction = inserted[0];
