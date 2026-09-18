@@ -14,6 +14,33 @@
       Upload
     </a>
 
+    <!--
+      Upload status badge — a persistent, live indicator visible on
+      every page (not just the Upload page's history table), so you
+      don't have to navigate anywhere or type a URL to see whether a
+      background upload has finished. Polls /uploads/my periodically
+      via loadUploadBadge() in main.js. Clicking it jumps to the
+      Upload page's full history.
+    -->
+    <a
+      id="nav-upload-badge"
+      href="/pages/upload.html"
+      class="upload-badge"
+      title="Recent upload status"
+      style="display:none;"
+    >
+      <span id="upload-badge-dot" class="badge-dot"></span>
+      <span id="upload-badge-text">Uploads</span>
+    </a>
+
+    <a
+      id="nav-review"
+      href="/pages/review.html"
+      style="display:none;"
+    >
+      Pending Review
+    </a>
+
     <a
       id="nav-register"
       href="/pages/register.html"

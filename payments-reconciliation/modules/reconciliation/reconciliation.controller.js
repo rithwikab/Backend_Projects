@@ -67,16 +67,16 @@ exports.listPendingReview = async (req, res, next) => {
   }
 };
 
-/* Approve a suggested match — commits the invoice/transaction status change */
+/* Approve a suggested match — commits the invoice/transaction status change, then re-runs reconciliation */
 exports.confirmMatch = async (req, res, next) => {
 
   try {
 
-    const recon = await confirmSuggestedMatch(req.params.id, req.user?.id);
+    const result = await confirmSuggestedMatch(req.params.id, req.user?.id);
 
     res.json({
       success: true,
-      data: recon
+      data: result // { reconciliation, rerun }
     });
 
   } catch (err) {
@@ -92,12 +92,12 @@ exports.confirmMatch = async (req, res, next) => {
   }
 };
 
-/* Reject a suggested match — invoice/transaction remain untouched */
+/* Reject a suggested match — invoice/transaction remain untouched, then re-runs reconciliation */
 exports.rejectMatch = async (req, res, next) => {
 
   try {
 
-    const recon = await rejectSuggestedMatch(
+    const result = await rejectSuggestedMatch(
       req.params.id,
       req.user?.id,
       req.body?.remarks
@@ -105,7 +105,7 @@ exports.rejectMatch = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: recon
+      data: result // { reconciliation, rerun }
     });
 
   } catch (err) {

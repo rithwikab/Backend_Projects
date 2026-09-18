@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <title>Pending Review | Payments Reconciliation</title>
+
+  <link rel="stylesheet" href="../css/style.css">
+
+</head>
+
+
+<body>
+
+  <div class="page-container">
+
+    <h1>Pending Review</h1>
+
+    <p class="subtitle">
+      Low-confidence matches (amount + customer only, no invoice reference) wait here for a human decision before any invoice or transaction status changes. Confirming or rejecting automatically re-runs reconciliation.
+    </p>
+
+    <div
+      id="messageBox"
+      class="message-box"
+    ></div>
+
+    <div id="reviewSection" class="card">
+
+      <table class="data-table">
+
+        <thead>
+          <tr>
+            <th>Invoice</th>
+            <th>Customer</th>
+            <th>Amount</th>
+            <th>Suggested Method</th>
+            <th>Candidate Transaction(s)</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+
+        <tbody id="reviewTableBody"></tbody>
+
+      </table>
+
+      <p id="reviewEmptyMsg" style="display:none; padding: 20px 0; color: #64748b;">
+        Nothing waiting for review right now.
+      </p>
+
+      <button onclick="loadPendingReview()">
+        Refresh
+      </button>
+
+    </div>
+
+  </div>
+
+  <script src="../js/main.js"></script>
+
+</body>
+</html>

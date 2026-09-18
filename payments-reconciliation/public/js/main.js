@@ -61,6 +61,14 @@ async function loadNavbar() {
     .style.display = "none";
   }
 
+  // Pending Review -- admin only. The review workflow changes
+  // financial status (confirming/rejecting a suggested match), so
+  // it is gated even tighter than audit -- analysts can view/audit
+  // but not decide a match.
+  if (role === "admin") {
+    document.getElementById("nav-review")
+      .style.display = "inline-block";
+  }
 
   // Show register only for admin
   if (role === "admin") {
@@ -71,6 +79,15 @@ async function loadNavbar() {
 
   document.getElementById("nav-logout")
     .style.display = "inline-block";
+
+  // Start the live upload-status badge (visible on every page, not
+  // just the Upload page) -- polls every 8s, and only while the tab
+  // is actually visible, so it does not hammer the API in a
+  // background tab.
+  loadUploadBadge();
+  setInterval(() => {
+    if (document.visibilityState === "visible") loadUploadBadge();
+  }, 8000);
 }
 
 
@@ -429,6 +446,7 @@ async function loadSummary() {
     <p>Partial: ${data.data.partial}</p>
     <p>Missing: ${data.data.missing}</p>
     <p>Unmatched: ${data.data.unmatched}</p>
+    <p>Pending Review: ${data.data.pendingReview ?? 0}</p>
 
   `;
 }
@@ -527,6 +545,12 @@ document.addEventListener("DOMContentLoaded", () => {
   if (path.includes("dashboard.html")) {
 
     initDashboard();
+  }
+
+  /* Pending Review Page (admin only) */
+  if (path.includes("review.html")) {
+
+    initReview();
   }
 });
 
@@ -731,4 +755,181 @@ async function loadAudit(reset = false) {
   });
 
   auditCursor = data.data.nextCursor;
+}
+
+
+/* =================================================
+   UPLOAD STATUS BADGE (navbar, all pages)
+================================================= */
+
+async function loadUploadBadge() {
+
+  const badge = document.getElementById("nav-upload-badge");
+  if (!badge) return;
+
+  try {
+
+    const res = await fetch("/api/v1/uploads/my?limit=5", {
+      headers: { Authorization: "Bearer " + token }
+    });
+
+    const data = await res.json();
+
+    if (!data.success) return;
+
+    const items = data.data.items || [];
+
+    if (items.length === 0) {
+      badge.style.display = "none";
+      return;
+    }
+
+    const pendingCount = items.filter(b => b.status === "PENDING").length;
+    const dot = document.getElementById("upload-badge-dot");
+    const text = document.getElementById("upload-badge-text");
+
+    badge.style.display = "inline-flex";
+
+    if (pendingCount > 0) {
+      dot.className = "badge-dot badge-dot-pending";
+      text.innerText = `${pendingCount} upload${pendingCount > 1 ? "s" : ""} processing...`;
+    } else {
+      const latest = items[0];
+      dot.className =
+        "badge-dot " +
+        (latest.status === "FAILED" ? "badge-dot-failed" : "badge-dot-ok");
+      text.innerText =
+        latest.status === "FAILED"
+          ? "Last upload failed"
+          : "Uploads up to date";
+    }
+
+  } catch (e) {
+    // Non-critical (a badge failing to refresh shouldn't disrupt
+    // the rest of the page) -- silently skip this cycle.
+  }
+}
+
+
+/* =================================================
+   PENDING REVIEW (admin only)
+================================================= */
+
+function initReview() {
+
+  const role = localStorage.getItem("role");
+
+  if (role !== "admin") {
+
+    document.getElementById("reviewSection").style.display = "none";
+    showMessage("Admin access only", "error");
+    return;
+  }
+
+  loadPendingReview();
+}
+
+
+async function loadPendingReview() {
+
+  const res = await fetch("/api/v1/reconciliation/pending-review?limit=50", {
+    headers: { Authorization: "Bearer " + token }
+  });
+
+  const data = await res.json();
+
+  if (!data.success) {
+    showMessage(data.error || "Failed to load pending review", "error");
+    return;
+  }
+
+  renderReviewTable(data.data.items || []);
+}
+
+
+function renderReviewTable(items) {
+
+  const tbody = document.getElementById("reviewTableBody");
+  tbody.innerHTML = "";
+
+  const emptyMsg = document.getElementById("reviewEmptyMsg");
+
+  if (items.length === 0) {
+    emptyMsg.style.display = "block";
+    return;
+  }
+
+  emptyMsg.style.display = "none";
+
+  for (const item of items) {
+
+    const exp = item.expected_payment_id || {};
+    const txns = item.actual_transaction_ids || [];
+
+    const row = document.createElement("tr");
+    row.dataset.id = item._id;
+
+    row.innerHTML = `
+      <td>${exp.source_ref || "—"}</td>
+      <td>${exp.customer_id || "—"}</td>
+      <td>${exp.amount ?? "—"} ${exp.currency || ""}</td>
+      <td>${item.status}</td>
+      <td>${txns.map(t => t.reference_no).join(", ") || "—"}</td>
+      <td class="review-actions">
+        <button class="btn-confirm" onclick="confirmReview('${item._id}')">Confirm</button>
+        <button class="btn-reject" onclick="rejectReview('${item._id}')">Reject</button>
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  }
+}
+
+
+async function confirmReview(id) {
+
+  const res = await fetch(`/api/v1/reconciliation/${id}/confirm`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token }
+  });
+
+  const data = await res.json();
+  handleReviewActionResult(data, "confirmed");
+}
+
+
+async function rejectReview(id) {
+
+  const res = await fetch(`/api/v1/reconciliation/${id}/reject`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token }
+  });
+
+  const data = await res.json();
+  handleReviewActionResult(data, "rejected");
+}
+
+
+function handleReviewActionResult(data, verb) {
+
+  if (!data.success) {
+    showMessage(data.error || `Failed to mark as ${verb}`, "error");
+    return;
+  }
+
+  // Every confirm/reject also triggers a fresh reconciliation run
+  // server-side (services/reconciliation.service.js) -- surface
+  // what that rerun found, not just the single action's result.
+  const rerun = data.data?.rerun;
+
+  if (rerun && rerun.reconciled) {
+    showMessage(
+      `Match ${verb}. Reconciliation re-run: ${rerun.autoConfirmed} auto-confirmed, ${rerun.pendingReview} new pending review.`,
+      "success"
+    );
+  } else {
+    showMessage(`Match ${verb}.`, "success");
+  }
+
+  loadPendingReview();
 }

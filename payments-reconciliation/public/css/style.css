@@ -463,3 +463,81 @@ th {
 .upload-box textarea {
   min-height: 140px;
 }
+
+/* ===============================
+   UPLOAD STATUS BADGE (navbar)
+================================ */
+
+.upload-badge {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+
+  background: rgba(255, 255, 255, 0.12);
+  padding: 5px 12px;
+  border-radius: 20px;
+
+  font-size: 13px;
+}
+
+.badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.badge-dot-pending {
+  background: #facc15;
+  animation: badge-pulse 1.2s infinite;
+}
+
+.badge-dot-ok {
+  background: #22c55e;
+}
+
+.badge-dot-failed {
+  background: #ef4444;
+}
+
+@keyframes badge-pulse {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.35; }
+  100% { opacity: 1; }
+}
+
+/* ===============================
+   PENDING REVIEW PAGE
+================================ */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.review-actions button {
+  margin: 0 4px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: white;
+}
+
+.btn-confirm {
+  background: #16a34a;
+}
+
+.btn-confirm:hover {
+  background: #15803d;
+}
+
+.btn-reject {
+  background: #dc2626;
+}
+
+.btn-reject:hover {
+  background: #b91c1c;
+}

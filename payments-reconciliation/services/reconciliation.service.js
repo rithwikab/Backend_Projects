@@ -37,7 +37,7 @@ const {
   Both are now batched together at the end, consistent with the
   rest of this function's "batch writes, don't loop" approach.
 */
-exports.runReconciliation = async () => {
+async function runReconciliationCore() {
 
   /* Fetch only required data */
   const expected = await Expected.find({
@@ -142,7 +142,9 @@ exports.runReconciliation = async () => {
     autoConfirmed: reconDocs.length - pendingReviewCount,
     pendingReview: pendingReviewCount
   };
-};
+}
+
+exports.runReconciliation = runReconciliationCore;
 
 
 /* STATUS MAPPING */
@@ -221,7 +223,20 @@ exports.confirmSuggestedMatch = async (reconciliationId, userId) => {
 
   cache.clear("recon-summary");
 
-  return recon;
+  /*
+    Re-run reconciliation after committing this confirmation. Not
+    strictly required for THIS invoice/transaction pair (already
+    committed above) — this exists because confirming one match can
+    free up downstream possibilities (e.g. this run's newly-MATCHED
+    transaction was the only thing blocking a DIFFERENT invoice's
+    aggregate match from completing). Runs against whatever is
+    currently PENDING/UNMATCHED, same as the manual "Run
+    Reconciliation" button — just triggered automatically here so a
+    reviewer doesn't have to remember to click it afterward.
+  */
+  const rerun = await runReconciliationCore();
+
+  return { reconciliation: recon, rerun };
 };
 
 exports.rejectSuggestedMatch = async (reconciliationId, userId, remarks) => {
@@ -249,7 +264,21 @@ exports.rejectSuggestedMatch = async (reconciliationId, userId, remarks) => {
   if (remarks) recon.remarks = remarks;
   await recon.save();
 
-  return recon;
+  /*
+    Re-run reconciliation after rejecting. This matters more here
+    than on confirm: rejecting frees the invoice AND its proposed
+    transaction(s) back into the pending pool exactly as they were
+    before this reconciliation pass ever ran — but reconcilePayments()
+    processes invoices/transactions in a fixed sort order each time,
+    so a fresh run may now propose (or fail to propose) something
+    different for them, e.g. matching that freed-up transaction to a
+    different invoice instead. Re-running immediately surfaces that
+    rather than leaving it until someone happens to click "Run
+    Reconciliation" again.
+  */
+  const rerun = await runReconciliationCore();
+
+  return { reconciliation: recon, rerun };
 };
 
 

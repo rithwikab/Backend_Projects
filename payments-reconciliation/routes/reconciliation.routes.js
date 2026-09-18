@@ -34,13 +34,18 @@ router.get(
   any ExpectedPayment/Transaction status. See
   services/reconciliation.logic.js's requiresReview and
   services/reconciliation.service.js's runReconciliation.
+
+  Deliberately admin-only, not admin+operations like /run — a
+  client-side-only restriction (hiding the nav link/page for
+  non-admins) with no matching server-side rule would be
+  meaningless, so this is enforced here too, not just in the UI.
 */
 
 /* List matches awaiting review */
 router.get(
   "/pending-review",
   auth,
-  rbac(["admin", "operations"]),
+  rbac(["admin"]),
   listPendingReview
 );
 
@@ -48,7 +53,7 @@ router.get(
 router.post(
   "/:id/confirm",
   auth,
-  rbac(["admin", "operations"]),
+  rbac(["admin"]),
   confirmMatch
 );
 
@@ -56,7 +61,7 @@ router.post(
 router.post(
   "/:id/reject",
   auth,
-  rbac(["admin", "operations"]),
+  rbac(["admin"]),
   rejectMatch
 );
 
