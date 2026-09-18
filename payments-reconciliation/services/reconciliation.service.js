@@ -62,9 +62,64 @@ async function runReconciliationCore() {
   const transactionIdsToMatch = [];
   const transactionIdsToPartial = [];
 
+  /*
+    FIXED BUG: every reconciliation run re-derives the same
+    low-confidence suggestion for an invoice/transaction pairing
+    that's still sitting PENDING/UNMATCHED — which used to mean a
+    NEW Reconciliation doc got inserted every single run,
+    regardless of whether one already existed for the exact same
+    pairing. Combined with confirmSuggestedMatch/rejectSuggestedMatch
+    now auto-triggering a rerun, this caused two visible problems:
+    duplicates piling up for a suggestion nobody had acted on yet,
+    AND a rejected suggestion reappearing as a brand-new "pending"
+    row on the very next run.
+
+    Fix: before creating a new suggestion doc, check whether a
+    Reconciliation doc already exists for the EXACT same
+    (invoice, transaction-set) pairing with review_status
+    PENDING_REVIEW (already awaiting a decision — don't duplicate
+    it) or REJECTED (a human already said no to this exact pairing
+    — don't resurface it as new). A genuinely DIFFERENT candidate
+    transaction for the same invoice is a different signature and
+    is still allowed through — this only suppresses re-showing the
+    identical suggestion, not all future suggestions for that
+    invoice.
+  */
+  const existingReviewDocs = await Reconciliation.find({
+    review_status: { $in: ["PENDING_REVIEW", "REJECTED"] }
+  }).select("expected_payment_id actual_transaction_ids");
+
+  const seenSignatures = new Set(
+    existingReviewDocs.map(d => buildPairingSignature(d.expected_payment_id, d.actual_transaction_ids))
+  );
+
   for (const r of results) {
 
     const isSuggested = r.requiresReview === true;
+
+    if (isSuggested) {
+
+      const signature = buildPairingSignature(r.expectedId, r.transactionIds);
+
+      if (seenSignatures.has(signature)) {
+        // Identical pairing already awaiting review, or already
+        // rejected once — skip creating a duplicate suggestion.
+        continue;
+      }
+
+      reconDocs.push({
+        expected_payment_id: r.expectedId,
+        actual_transaction_ids: r.transactionIds || [],
+        status: r.status,
+        variance_amount: r.variance,
+        method: "AUTO",
+        review_status: "PENDING_REVIEW"
+      });
+
+      // Do NOT touch Expected/Transaction yet — this is only a
+      // suggestion until a human confirms it.
+      continue;
+    }
 
     reconDocs.push({
       expected_payment_id: r.expectedId,
@@ -72,14 +127,8 @@ async function runReconciliationCore() {
       status: r.status,
       variance_amount: r.variance,
       method: "AUTO",
-      review_status: isSuggested ? "PENDING_REVIEW" : "AUTO_CONFIRMED"
+      review_status: "AUTO_CONFIRMED"
     });
-
-    if (isSuggested) {
-      // Do NOT touch Expected/Transaction yet — this is only a
-      // suggestion until a human confirms it.
-      continue;
-    }
 
     expectedUpdates.push({
       updateOne: {
@@ -147,6 +196,14 @@ async function runReconciliationCore() {
 exports.runReconciliation = runReconciliationCore;
 
 
+/* PAIRING SIGNATURE (for suggestion dedup) */
+
+function buildPairingSignature(expectedId, transactionIds) {
+  const sortedTx = (transactionIds || []).map(String).sort().join(",");
+  return `${String(expectedId)}::${sortedTx}`;
+}
+
+
 /* STATUS MAPPING */
 
 function mapExpectedStatus(status) {
@@ -170,11 +227,16 @@ function mapExpectedStatus(status) {
    SUGGESTED MATCH REVIEW WORKFLOW (NEW)
 ================================ */
 
-exports.listPendingReview = async ({ cursor, limit }) => {
+exports.listPendingReview = async ({ cursor, limit, reviewStatus }) => {
 
   const parsedCursor = decodeCursor(cursor);
 
-  const baseFilter = { review_status: "PENDING_REVIEW" };
+  // Defaults to PENDING_REVIEW (the actionable queue). Passing
+  // reviewStatus: "REJECTED" reuses this same function to show
+  // previously-rejected suggestions as read-only history, instead
+  // of duplicating this query/pagination logic in a second
+  // function for what is otherwise an identical shape of data.
+  const baseFilter = { review_status: reviewStatus || "PENDING_REVIEW" };
 
   const query = buildMongoQuery(baseFilter, parsedCursor);
 

@@ -56,6 +56,37 @@
 
     </div>
 
+    <!--
+      Read-only history — matches a human already rejected. Kept
+      separate from the actionable table above so a rejected
+      suggestion never mixes back in as if it were new.
+    -->
+    <div id="rejectedSection" class="card">
+
+      <h3>Previously Rejected</h3>
+
+      <table class="data-table">
+
+        <thead>
+          <tr>
+            <th>Invoice</th>
+            <th>Customer</th>
+            <th>Amount</th>
+            <th>Suggested Method</th>
+            <th>Candidate Transaction(s)</th>
+          </tr>
+        </thead>
+
+        <tbody id="rejectedTableBody"></tbody>
+
+      </table>
+
+      <p id="rejectedEmptyMsg" style="display:none; padding: 20px 0; color: #64748b;">
+        No rejected matches yet.
+      </p>
+
+    </div>
+
   </div>
 
   <script src="../js/main.js"></script>

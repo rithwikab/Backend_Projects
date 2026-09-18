@@ -53,9 +53,9 @@ exports.listPendingReview = async (req, res, next) => {
 
   try {
 
-    const { cursor, limit } = req.query;
+    const { cursor, limit, review_status } = req.query;
 
-    const result = await listPendingReview({ cursor, limit });
+    const result = await listPendingReview({ cursor, limit, reviewStatus: review_status });
 
     res.json({
       success: true,

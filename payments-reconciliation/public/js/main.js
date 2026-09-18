@@ -822,11 +822,13 @@ function initReview() {
   if (role !== "admin") {
 
     document.getElementById("reviewSection").style.display = "none";
+    document.getElementById("rejectedSection").style.display = "none";
     showMessage("Admin access only", "error");
     return;
   }
 
   loadPendingReview();
+  loadRejectedHistory();
 }
 
 
@@ -843,16 +845,49 @@ async function loadPendingReview() {
     return;
   }
 
-  renderReviewTable(data.data.items || []);
+  renderReviewTable(
+    data.data.items || [],
+    "reviewTableBody",
+    "reviewEmptyMsg",
+    true // show Confirm/Reject buttons
+  );
 }
 
 
-function renderReviewTable(items) {
+/*
+  Read-only history of matches a human already rejected. Kept as a
+  SEPARATE table/query (review_status=REJECTED) from the actionable
+  pending queue above -- see services/reconciliation.service.js's
+  buildPairingSignature, which now stops a rejected pairing from
+  ever being re-inserted into the PENDING_REVIEW table again. This
+  is just where that history becomes visible, clearly labeled as
+  old, instead of disappearing entirely.
+*/
+async function loadRejectedHistory() {
 
-  const tbody = document.getElementById("reviewTableBody");
+  const res = await fetch("/api/v1/reconciliation/pending-review?limit=50&review_status=REJECTED", {
+    headers: { Authorization: "Bearer " + token }
+  });
+
+  const data = await res.json();
+
+  if (!data.success) return;
+
+  renderReviewTable(
+    data.data.items || [],
+    "rejectedTableBody",
+    "rejectedEmptyMsg",
+    false // no action buttons -- this is history, not a queue
+  );
+}
+
+
+function renderReviewTable(items, tbodyId, emptyMsgId, showActions) {
+
+  const tbody = document.getElementById(tbodyId);
   tbody.innerHTML = "";
 
-  const emptyMsg = document.getElementById("reviewEmptyMsg");
+  const emptyMsg = document.getElementById(emptyMsgId);
 
   if (items.length === 0) {
     emptyMsg.style.display = "block";
@@ -869,16 +904,20 @@ function renderReviewTable(items) {
     const row = document.createElement("tr");
     row.dataset.id = item._id;
 
+    const actionsCell = showActions
+      ? `<td class="review-actions">
+          <button class="btn-confirm" onclick="confirmReview('${item._id}')">Confirm</button>
+          <button class="btn-reject" onclick="rejectReview('${item._id}')">Reject</button>
+        </td>`
+      : "";
+
     row.innerHTML = `
       <td>${exp.source_ref || "—"}</td>
       <td>${exp.customer_id || "—"}</td>
       <td>${exp.amount ?? "—"} ${exp.currency || ""}</td>
       <td>${item.status}</td>
       <td>${txns.map(t => t.reference_no).join(", ") || "—"}</td>
-      <td class="review-actions">
-        <button class="btn-confirm" onclick="confirmReview('${item._id}')">Confirm</button>
-        <button class="btn-reject" onclick="rejectReview('${item._id}')">Reject</button>
-      </td>
+      ${actionsCell}
     `;
 
     tbody.appendChild(row);
@@ -932,4 +971,5 @@ function handleReviewActionResult(data, verb) {
   }
 
   loadPendingReview();
+  loadRejectedHistory();
 }
